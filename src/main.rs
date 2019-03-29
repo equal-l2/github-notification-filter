@@ -73,15 +73,36 @@ enum ErrorKind {
     ReqwestError(reqwest::Error),
 }
 
-fn get_notification_subscriptions(client: &Client) -> Fallible<Vec<Subscription>> {
-    let mut resp = client.get("https://api.github.com/notifications").send()?;
+fn get_notification_subscriptions(client: &Client, all: bool) -> Fallible<Vec<Subscription>> {
+    let mut resp = client
+        .get("https://api.github.com/notifications")
+        .query(&[("all", if all {"true"} else {"false"})])
+        .send()?;
 
     if resp.status() != 200 {
         return Err(ErrorKind::ResponseStatusError(resp.status()).into());
     }
 
-    let ns: Vec<Notification> = resp.json().unwrap();
-    Ok(ns.into_iter().map(Subscription::from).collect::<Vec<_>>())
+    let mut ss = {
+        let ns: Vec<Notification> = resp.json()?;
+        ns.into_iter().map(Subscription::from).collect::<Vec<_>>()
+    };
+
+    for i in 2.. {
+        let mut resp = client
+            .get("https://api.github.com/notifications")
+            .query(&[("all", if all {"true"} else {"false"}), ("page", &i.to_string())])
+            .send()?;
+        if resp.status() == 200 {
+            let ns: Vec<Notification> = resp.json()?;
+            if !ns.is_empty() {
+                ss.extend(ns.into_iter().map(Subscription::from));
+                continue;
+            }
+        }
+        return Ok(ss);
+    }
+    unreachable!();
 }
 
 fn unsubscribe_thread(client: &Client, thread_id: &String) -> Fallible<()> {
@@ -145,7 +166,7 @@ fn create_client() -> Fallible<Client> {
 
 fn main() {
     let c = create_client().unwrap();
-    let ss = get_notification_subscriptions(&c).unwrap();
+    let ss = get_notification_subscriptions(&c, false).unwrap();
     let re = compile_regex().unwrap();
     let going_to_be_deleted: Vec<_> = ss
         .into_iter()
