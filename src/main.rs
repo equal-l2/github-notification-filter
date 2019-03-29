@@ -122,7 +122,7 @@ fn compile_regex() -> Fallible<regex::Regex> {
     let filters = BufReader::new(f)
         .lines()
         .collect::<Result<Vec<_>, std::io::Error>>()?;
-    let filters_string = filters.join("|");
+    let filters_string = String::from(r"(?i)") + &filters.join("|");
     match regex::Regex::new(&filters_string) {
         Ok(i) => return Ok(i),
         Err(i) => return Err(ErrorKind::RegexError(i).into()),
