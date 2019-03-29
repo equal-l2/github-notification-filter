@@ -1,0 +1,10 @@
+[package]
+name = "github-notification-filter"
+version = "0.1.0"
+authors = ["equal-l2 <eng.equall2@gmail.com>"]
+edition = "2018"
+license = "MIT OR APACHE-2.0"
+
+[dependencies]
+serde_json = "1.0.39"
+reqwest = "0.9.12"
