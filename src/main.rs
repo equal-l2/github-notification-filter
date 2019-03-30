@@ -35,6 +35,7 @@ struct Subject {
 enum SubjectType {
     Issue,
     PullRequest,
+    Commit,
     Other(String),
 }
 
@@ -43,6 +44,7 @@ impl std::fmt::Display for SubjectType {
         match self {
             SubjectType::Issue => write!(f, "Issue"),
             SubjectType::PullRequest => write!(f, "Pull Request"),
+            SubjectType::Commit => write!(f, "Commit"),
             SubjectType::Other(i) => write!(f, "\"{}\"", i),
         }
     }
@@ -73,10 +75,9 @@ enum ErrorKind {
     ReqwestError(reqwest::Error),
 }
 
-fn get_notification_subscriptions(client: &Client, all: bool) -> Fallible<Vec<Subscription>> {
+fn get_notification_subscriptions(client: &Client) -> Fallible<Vec<Subscription>> {
     let mut resp = client
         .get("https://api.github.com/notifications")
-        .query(&[("all", if all {"true"} else {"false"})])
         .send()?;
 
     if resp.status() != 200 {
@@ -91,7 +92,7 @@ fn get_notification_subscriptions(client: &Client, all: bool) -> Fallible<Vec<Su
     for i in 2.. {
         let mut resp = client
             .get("https://api.github.com/notifications")
-            .query(&[("all", if all {"true"} else {"false"}), ("page", &i.to_string())])
+            .query(&[("page", &i.to_string())])
             .send()?;
         if resp.status() == 200 {
             let ns: Vec<Notification> = resp.json()?;
@@ -165,8 +166,23 @@ fn create_client() -> Fallible<Client> {
 }
 
 fn main() {
+    let m = clap::App::new("")
+        .arg(clap::Arg::with_name("list")
+             .long("list")
+             .help("List all subscriptions"))
+        .get_matches();
+
+    let list = m.is_present("list");
+
     let c = create_client().unwrap();
-    let ss = get_notification_subscriptions(&c, false).unwrap();
+    let ss = get_notification_subscriptions(&c).unwrap();
+    if list {
+        for s in ss {
+            println!("{} : {}", s.subject.r#type, s.subject.title);
+        }
+        return;
+    }
+
     let re = compile_regex().unwrap();
     let going_to_be_deleted: Vec<_> = ss
         .into_iter()
