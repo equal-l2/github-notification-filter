@@ -168,15 +168,23 @@ fn create_client() -> Fallible<Client> {
 }
 
 fn main() {
-    let m = clap::App::new("")
+    let m = clap::App::new("github-notification-filter")
+        .version("0.2.0")
         .arg(
             clap::Arg::with_name("list")
+                .help("List all subscriptions")
                 .long("list")
-                .help("List all subscriptions"),
+        )
+        .arg(
+            clap::Arg::with_name("no-confirm")
+                .help("Do not pause before unsubscription")
+                .long("no-confirm")
+                .short("y")
         )
         .get_matches();
 
     let list = m.is_present("list");
+    let no_confirm = m.is_present("no-confirm");
 
     let c = create_client().unwrap();
     let ss = get_notification_subscriptions(&c).unwrap();
@@ -197,13 +205,15 @@ fn main() {
         return;
     }
 
-    for s in candidates.iter() {
-        println!("{} : {}", s.subject.r#type, s.subject.title);
-    }
+    if !no_confirm {
+        for s in candidates.iter() {
+            println!("{} : {}", s.subject.r#type, s.subject.title);
+        }
 
-    println!("To unsubscribe the notification(s), press Enter\n(If you don't want to, just abort (e.g. Ctrl+C))");
-    let mut s = String::new();
-    let _ = std::io::stdin().read_line(&mut s);
+        println!("\nTo unsubscribe the notification(s), press Enter\n(If you don't want to, just abort (e.g. Ctrl+C))");
+        let mut s = String::new();
+        let _ = std::io::stdin().read_line(&mut s);
+    }
 
     for s in candidates.iter() {
         unsubscribe_thread(&c, &s.thread_id).unwrap();
