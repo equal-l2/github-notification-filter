@@ -169,9 +169,11 @@ fn create_client() -> Fallible<Client> {
 
 fn main() {
     let m = clap::App::new("")
-        .arg(clap::Arg::with_name("list")
-             .long("list")
-             .help("List all subscriptions"))
+        .arg(
+            clap::Arg::with_name("list")
+                .long("list")
+                .help("List all subscriptions"),
+        )
         .get_matches();
 
     let list = m.is_present("list");
@@ -186,24 +188,24 @@ fn main() {
     }
 
     let re = compile_regex().unwrap();
-    let going_to_be_deleted: Vec<_> = ss
+    let candidates: Vec<_> = ss
         .into_iter()
         .filter(|s| re.is_match(&s.subject.title))
         .collect();
-    if going_to_be_deleted.is_empty() {
-        println!("No notification to delete");
+    if candidates.is_empty() {
+        println!("No notification matched");
         return;
     }
 
-    for s in going_to_be_deleted.iter() {
+    for s in candidates.iter() {
         println!("{} : {}", s.subject.r#type, s.subject.title);
     }
 
-    println!("To delete the notification(s), press Enter");
+    println!("To unsubscribe the notification(s), press Enter\n(If you don't want to, just abort (e.g. Ctrl+C))");
     let mut s = String::new();
     let _ = std::io::stdin().read_line(&mut s);
 
-    for s in going_to_be_deleted.iter() {
+    for s in candidates.iter() {
         unsubscribe_thread(&c, &s.thread_id).unwrap();
         mark_a_thread_as_read(&c, &s.thread_id).unwrap();
         println!(
