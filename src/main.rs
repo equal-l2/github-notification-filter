@@ -76,9 +76,7 @@ enum ErrorKind {
 }
 
 fn get_notification_subscriptions(client: &Client) -> Fallible<Vec<Subscription>> {
-    let mut resp = client
-        .get("https://api.github.com/notifications")
-        .send()?;
+    let mut resp = client.get("https://api.github.com/notifications").send()?;
 
     if resp.status() != 200 {
         return Err(ErrorKind::ResponseStatusError(resp.status()).into());
@@ -138,8 +136,7 @@ fn mark_a_thread_as_read(client: &Client, thread_id: &String) -> Fallible<()> {
 }
 
 fn compile_regex() -> Fallible<regex::Regex> {
-    let mut path = dirs::home_dir().unwrap();
-    path.push(".ghnf_filter");
+    let path = dirs::home_dir().unwrap().join(".ghnf").join("filters");
     let f = std::fs::File::open(path)?;
     let filters = BufReader::new(f)
         .lines()
@@ -152,7 +149,12 @@ fn compile_regex() -> Fallible<regex::Regex> {
 }
 
 fn create_client() -> Fallible<Client> {
-    let token = std::env::var("GITHUB_PERSONAL_ACCESS_TOKEN")?;
+    let path = dirs::home_dir().unwrap().join(".ghnf").join("token");
+    let token = std::fs::read_to_string(path)?
+        .split('\n')
+        .nth(0)
+        .unwrap()
+        .to_owned();
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
         reqwest::header::AUTHORIZATION,
