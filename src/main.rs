@@ -82,11 +82,6 @@ fn main() {
     let m = clap::App::new("github-notification-filter")
         .version("0.2.0")
         .arg(
-            clap::Arg::with_name("list")
-                .help("List all subscriptions")
-                .long("list"),
-        )
-        .arg(
             clap::Arg::with_name("no-confirm")
                 .help("Do not pause before unsubscription")
                 .long("no-confirm")
@@ -96,6 +91,10 @@ fn main() {
             clap::SubCommand::with_name("open")
                 .about("Open the thread with the web browser")
                 .arg(clap::Arg::with_name("thread_id").index(1)),
+        )
+        .subcommand(
+            clap::SubCommand::with_name("list")
+                .about("List all unread subscriptions")
         )
         .get_matches();
 
@@ -115,16 +114,15 @@ fn main() {
         return;
     }
 
-    let list = m.is_present("list");
-    let no_confirm = m.is_present("no-confirm");
-
     let ss = Subscription::fetch_unread(&c).unwrap_or_else(|e: Error| panic!("{}", e.backtrace()));
-    if list {
+    if m.subcommand_matches("list").is_some() {
         for s in ss {
             println!("{}", s);
         }
         return;
     }
+
+    let no_confirm = m.is_present("no-confirm");
 
     filter_and_unsubscribe(ss, no_confirm, &c)
         .unwrap_or_else(|e: Error| panic!("{}", e.backtrace()));
