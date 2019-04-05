@@ -1,3 +1,7 @@
+use failure::{err_msg, format_err, Fallible};
+use reqwest::Client;
+use serde_json::Value;
+
 #[derive(Clone, Debug, serde::Deserialize)]
 pub struct Notification {
     pub subject: Subject,
@@ -23,6 +27,24 @@ pub struct Subject {
     //latest_comment_url: Option<String>,
 }
 
+impl Subject {
+    pub fn get_html_url(&self, client: &Client) -> Fallible<String> {
+        let mut resp = client.get(&self.url).send()?;
+
+        if resp.status() != 200 {
+            Err(err_msg(format_err!(
+                "Unexpected HTTP Status {} (Expected 200)",
+                resp.status()
+            )))?
+        }
+
+        Ok(resp.json::<Value>()?["html_url"]
+            .as_str()
+            .unwrap()
+            .to_owned())
+    }
+}
+
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(field_identifier)]
 pub enum SubjectType {
@@ -41,11 +63,4 @@ impl std::fmt::Display for SubjectType {
             SubjectType::Other(i) => write!(f, "\"{}\"", i),
         }
     }
-}
-
-#[derive(Clone, Debug, serde::Deserialize)]
-pub struct SubjectContent {
-    pub html_url: String,
-    pub comments: Option<usize>,
-    pub statuses_url: Option<String>,
 }

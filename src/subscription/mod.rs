@@ -33,6 +33,29 @@ impl std::fmt::Display for Subscription {
 }
 
 impl Subscription {
+    pub fn from_thread_id(client: &Client, id: ThreadID) -> Fallible<Subscription> {
+        let mut resp = client
+            .get(&format!(
+                "https://api.github.com/notifications/threads/{}",
+                id
+            ))
+            .send()?;
+
+        if resp.status() != 200 {
+            Err(err_msg(format_err!(
+                "Unexpected HTTP Status {} (Expected 200)",
+                resp.status()
+            )))?
+        }
+
+        Ok(resp.json::<Notification>()?.into())
+    }
+
+    pub fn open_thread(&self, c: &Client) -> Fallible<()> {
+        let _ = open::that(self.subject.get_html_url(&c)?);
+        Ok(())
+    }
+
     pub fn fetch_unread(client: &Client) -> Fallible<Vec<Subscription>> {
         let mut resp = client.get("https://api.github.com/notifications").send()?;
 

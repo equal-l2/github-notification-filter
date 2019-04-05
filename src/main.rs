@@ -2,7 +2,7 @@ use failure::{err_msg, Error, Fallible};
 use reqwest::Client;
 
 mod subscription;
-use subscription::Subscription;
+use subscription::{Subscription, ThreadID};
 
 fn read_config(filename: &str) -> Fallible<String> {
     let path = dirs::home_dir()
@@ -39,12 +39,12 @@ fn create_client() -> Fallible<Client> {
         .build()?)
 }
 
-fn load_ignored() -> Fallible<Vec<subscription::ThreadID>> {
+fn load_ignored() -> Fallible<Vec<ThreadID>> {
     Ok(read_config("ignore")?
         .split('\n')
         .filter(|s| !s.is_empty())
         .map(|s| s.parse())
-        .collect::<Result<Vec<subscription::ThreadID>, _>>()?)
+        .collect::<Result<Vec<ThreadID>, _>>()?)
 }
 
 fn filter_and_unsubscribe(ss: Vec<Subscription>, no_confirm: bool, c: &Client) -> Fallible<()> {
@@ -92,13 +92,33 @@ fn main() {
                 .long("no-confirm")
                 .short("y"),
         )
+        .subcommand(
+            clap::SubCommand::with_name("open")
+                .about("Open the thread with the web browser")
+                .arg(clap::Arg::with_name("thread_id").index(1)),
+        )
         .get_matches();
+
+    let c = create_client().unwrap_or_else(|e: Error| panic!("{}", e.backtrace()));
+
+    if let Some(sub_m) = m.subcommand_matches("open") {
+        if let Some(i) = sub_m.value_of("thread_id") {
+            if let Ok(n) = i.parse::<ThreadID>() {
+                Subscription::from_thread_id(&c, n)
+                    .unwrap()
+                    .open_thread(&c)
+                    .unwrap();
+            }
+        } else {
+            println!("{}", m.usage());
+        }
+        return;
+    }
 
     let list = m.is_present("list");
     let no_confirm = m.is_present("no-confirm");
 
-    let c = create_client().unwrap_or_else(|e: Error| panic!("{}", e.backtrace()));
-    let ss = Subscription::fetch_unread(&c).unwrap_or_else(|e:Error| panic!("{}", e.backtrace()));
+    let ss = Subscription::fetch_unread(&c).unwrap_or_else(|e: Error| panic!("{}", e.backtrace()));
     if list {
         for s in ss {
             println!("{}", s);
@@ -106,5 +126,6 @@ fn main() {
         return;
     }
 
-    filter_and_unsubscribe(ss, no_confirm, &c).unwrap_or_else(|e:Error| panic!("{}", e.backtrace()));
+    filter_and_unsubscribe(ss, no_confirm, &c)
+        .unwrap_or_else(|e: Error| panic!("{}", e.backtrace()));
 }
