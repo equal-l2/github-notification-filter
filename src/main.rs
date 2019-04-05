@@ -1,11 +1,9 @@
-use failure::Fallible;
+use failure::{err_msg, Fallible};
 use reqwest::Client;
 use std::io::{BufRead, BufReader};
 
-mod error;
 mod subscription;
 
-use error::ErrorKind;
 use subscription::Subscription;
 
 fn compile_regex() -> Fallible<regex::Regex> {
@@ -15,10 +13,7 @@ fn compile_regex() -> Fallible<regex::Regex> {
         .lines()
         .collect::<Result<Vec<_>, std::io::Error>>()?;
     let filters_string = String::from(r"(?i)") + &filters.join("|");
-    match regex::Regex::new(&filters_string) {
-        Ok(i) => return Ok(i),
-        Err(i) => return Err(ErrorKind::RegexError(i).into()),
-    }
+    Ok(regex::Regex::new(&filters_string)?)
 }
 
 fn create_client() -> Fallible<Client> {
@@ -26,18 +21,45 @@ fn create_client() -> Fallible<Client> {
     let token = std::fs::read_to_string(path)?
         .split('\n')
         .nth(0)
-        .unwrap()
+        .ok_or(err_msg("Malformed GitHub Personal Access Token"))?
         .to_owned();
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
         reqwest::header::AUTHORIZATION,
         reqwest::header::HeaderValue::from_str(&format!("token {}", token))?,
     );
-    let c = reqwest::Client::builder().default_headers(headers).build();
-    match c {
-        Ok(i) => return Ok(i),
-        Err(i) => return Err(ErrorKind::ReqwestError(i).into()),
+    Ok(reqwest::Client::builder()
+        .default_headers(headers)
+        .build()?)
+}
+
+fn filter_and_unsubscribe(ss: Vec<Subscription>, no_confirm: bool, c: &Client) -> Fallible<()> {
+    let re = compile_regex().unwrap();
+    let candidates: Vec<_> = ss
+        .into_iter()
+        .filter(|s| re.is_match(&s.subject.title))
+        .collect();
+    if !candidates.is_empty() {
+        if !no_confirm {
+            for s in candidates.iter() {
+                println!("{}", s);
+            }
+
+            println!("\nTo unsubscribe the notification(s), press Enter\n(If you don't want to, just abort (e.g. Ctrl+C))");
+            let mut s = String::new();
+            let _ = std::io::stdin().read_line(&mut s)?;
+        }
+
+        for s in candidates.iter() {
+            s.unsubscribe_thread(&c)?;
+            s.mark_a_thread_as_read(&c)?;
+            println!("Unsubscribed {}", s);
+        }
+    } else {
+        println!("No notification matched");
     }
+
+    Ok(())
 }
 
 fn main() {
@@ -68,29 +90,5 @@ fn main() {
         return;
     }
 
-    let re = compile_regex().unwrap();
-    let candidates: Vec<_> = ss
-        .into_iter()
-        .filter(|s| re.is_match(&s.subject.title))
-        .collect();
-    if candidates.is_empty() {
-        println!("No notification matched");
-        return;
-    }
-
-    if !no_confirm {
-        for s in candidates.iter() {
-            println!("{}", s);
-        }
-
-        println!("\nTo unsubscribe the notification(s), press Enter\n(If you don't want to, just abort (e.g. Ctrl+C))");
-        let mut s = String::new();
-        let _ = std::io::stdin().read_line(&mut s);
-    }
-
-    for s in candidates.iter() {
-        s.unsubscribe_thread(&c).unwrap();
-        s.mark_a_thread_as_read(&c).unwrap();
-        println!("Unsubscribed {} ({})", s, s.subject.url);
-    }
+    filter_and_unsubscribe(ss, no_confirm, &c).unwrap();
 }

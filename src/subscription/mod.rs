@@ -1,29 +1,32 @@
-use failure::Fallible;
+use failure::{err_msg, format_err, Fallible};
 use reqwest::Client;
 use serde_json::json;
 
 mod gh_objects;
-use crate::ErrorKind;
 use gh_objects::Notification;
 
 #[derive(Clone, Debug)]
 pub struct Subscription {
     pub subject: gh_objects::Subject,
-    thread_id: String,
+    thread_id: u32,
 }
 
 impl From<Notification> for Subscription {
     fn from(n: Notification) -> Self {
         Self {
             subject: n.subject,
-            thread_id: n.url.split('/').last().unwrap().into(),
+            thread_id: n.url.split('/').last().unwrap().parse().unwrap(),
         }
     }
 }
 
 impl std::fmt::Display for Subscription {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{} : {}", self.subject.r#type, self.subject.title)
+        write!(
+            f,
+            "{} : {} ({})",
+            self.subject.r#type, self.subject.title, self.thread_id
+        )
     }
 }
 
@@ -32,7 +35,10 @@ impl Subscription {
         let mut resp = client.get("https://api.github.com/notifications").send()?;
 
         if resp.status() != 200 {
-            return Err(ErrorKind::ResponseStatusError(resp.status()).into());
+            Err(err_msg(format_err!(
+                "Unexpected HTTP Status {} (Expected 200)",
+                resp.status()
+            )))?
         }
 
         let mut ss = {
@@ -67,7 +73,10 @@ impl Subscription {
             .send()?;
 
         if resp.status() != 200 {
-            return Err(ErrorKind::ResponseStatusError(resp.status()).into());
+            Err(err_msg(format_err!(
+                "Unexpected HTTP Status {} (Expected 200)",
+                resp.status()
+            )))?
         }
 
         Ok(())
@@ -82,7 +91,10 @@ impl Subscription {
             .send()?;
 
         if resp.status() != 205 {
-            return Err(ErrorKind::ResponseStatusError(resp.status()).into());
+            Err(err_msg(format_err!(
+                "Unexpected HTTP Status {} (Expected 205)",
+                resp.status()
+            )))?
         }
 
         Ok(())
