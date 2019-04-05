@@ -1,24 +1,30 @@
-use failure::{err_msg, Fallible};
+use failure::{err_msg, Error, Fallible};
 use reqwest::Client;
-use std::io::{BufRead, BufReader};
 
 mod subscription;
-
 use subscription::Subscription;
 
+fn read_config(filename: &str) -> Fallible<String> {
+    let path = dirs::home_dir()
+        .ok_or(err_msg("Failed to read ~/"))?
+        .join(".ghnf")
+        .join(filename);
+    Ok(std::fs::read_to_string(path)?)
+}
+
 fn compile_regex() -> Fallible<regex::Regex> {
-    let path = dirs::home_dir().unwrap().join(".ghnf").join("filters");
-    let f = std::fs::File::open(path)?;
-    let filters = BufReader::new(f)
-        .lines()
-        .collect::<Result<Vec<_>, std::io::Error>>()?;
+    let filters: Vec<_> = read_config("filters")?
+        .split('\n')
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect();
+
     let filters_string = String::from(r"(?i)") + &filters.join("|");
     Ok(regex::Regex::new(&filters_string)?)
 }
 
 fn create_client() -> Fallible<Client> {
-    let path = dirs::home_dir().unwrap().join(".ghnf").join("token");
-    let token = std::fs::read_to_string(path)?
+    let token = read_config("token")?
         .split('\n')
         .nth(0)
         .ok_or(err_msg("Malformed GitHub Personal Access Token"))?
@@ -33,11 +39,21 @@ fn create_client() -> Fallible<Client> {
         .build()?)
 }
 
+fn load_ignored() -> Fallible<Vec<subscription::ThreadID>> {
+    Ok(read_config("ignore")?
+        .split('\n')
+        .filter(|s| !s.is_empty())
+        .map(|s| s.parse())
+        .collect::<Result<Vec<subscription::ThreadID>, _>>()?)
+}
+
 fn filter_and_unsubscribe(ss: Vec<Subscription>, no_confirm: bool, c: &Client) -> Fallible<()> {
-    let re = compile_regex().unwrap();
+    let re = compile_regex()?;
+    let ignore = load_ignored()?;
     let candidates: Vec<_> = ss
         .into_iter()
         .filter(|s| re.is_match(&s.subject.title))
+        .filter(|s| !ignore.contains(&s.thread_id))
         .collect();
     if !candidates.is_empty() {
         if !no_confirm {
@@ -81,8 +97,8 @@ fn main() {
     let list = m.is_present("list");
     let no_confirm = m.is_present("no-confirm");
 
-    let c = create_client().unwrap();
-    let ss = Subscription::fetch_unread(&c).unwrap();
+    let c = create_client().unwrap_or_else(|e: Error| panic!("{}", e.backtrace()));
+    let ss = Subscription::fetch_unread(&c).unwrap_or_else(|e:Error| panic!("{}", e.backtrace()));
     if list {
         for s in ss {
             println!("{}", s);
@@ -90,5 +106,5 @@ fn main() {
         return;
     }
 
-    filter_and_unsubscribe(ss, no_confirm, &c).unwrap();
+    filter_and_unsubscribe(ss, no_confirm, &c).unwrap_or_else(|e:Error| panic!("{}", e.backtrace()));
 }

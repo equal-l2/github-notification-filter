@@ -5,10 +5,12 @@ use serde_json::json;
 mod gh_objects;
 use gh_objects::Notification;
 
+pub type ThreadID = u64;
+
 #[derive(Clone, Debug)]
 pub struct Subscription {
     pub subject: gh_objects::Subject,
-    thread_id: u32,
+    pub thread_id: ThreadID,
 }
 
 impl From<Notification> for Subscription {
