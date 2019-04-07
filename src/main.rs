@@ -1,5 +1,6 @@
 use clap::ArgMatches;
 use failure::{err_msg, Error, Fallible};
+use rayon::prelude::*;
 use reqwest::Client;
 
 mod subscription;
@@ -67,11 +68,15 @@ fn filter_and_unsubscribe(ss: Vec<Subscription>, no_confirm: bool, c: &Client) -
             let _ = std::io::stdin().read_line(&mut s)?;
         }
 
-        for s in candidates.iter() {
-            s.unsubscribe_thread(&c)?;
-            s.mark_a_thread_as_read(&c)?;
-            println!("Unsubscribed {}", s);
-        }
+        candidates
+            .par_iter()
+            .map(|s: &Subscription| -> Fallible<()> {
+                s.unsubscribe_thread(&c)?;
+                s.mark_a_thread_as_read(&c)?;
+                println!("Unsubscribed {}", s);
+                Ok(())
+            })
+            .collect::<Result<(), _>>()?;
     } else {
         println!("No notification matched");
     }
