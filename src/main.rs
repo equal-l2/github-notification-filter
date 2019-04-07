@@ -42,11 +42,22 @@ fn create_client() -> Fallible<Client> {
 }
 
 fn load_ignored() -> Fallible<Vec<ThreadID>> {
-    Ok(read_config("ignore")?
+    // `ignore` is optional, return empty vec when not found
+    Ok(read_config("ignore")
+        .or_else(|e: failure::Error| -> _ {
+            if let Some(i) = e.as_fail().downcast_ref::<std::io::Error>() {
+                match i.kind() {
+                    std::io::ErrorKind::NotFound => Ok("".into()),
+                    _ => Err(e),
+                }
+            } else {
+                Err(e)
+            }
+        })?
         .split('\n')
         .filter(|s| !s.is_empty())
         .map(|s| s.parse())
-        .collect::<Result<Vec<ThreadID>, _>>()?)
+        .collect::<Result<Vec<_>, _>>()?)
 }
 
 fn filter_and_unsubscribe(ss: Vec<Subscription>, no_confirm: bool, c: &Client) -> Fallible<()> {
