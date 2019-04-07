@@ -97,10 +97,8 @@ fn filter_and_unsubscribe(ss: Vec<Subscription>, no_confirm: bool, c: &Client) -
 
 fn sc_open(m: &ArgMatches) -> Fallible<()> {
     let c = create_client()?;
-    if let Some(i) = m.value_of("thread_id") {
-        if let Ok(n) = i.parse::<ThreadID>() {
-            Subscription::from_thread_id(&c, n)?.open_thread(&c)?
-        }
+    if let Ok(i) = m.value_of("thread_id").unwrap().parse() {
+        Subscription::from_thread_id(&c, i)?.open_thread(&c)?
     } else {
         println!("{}", m.usage());
     }
@@ -141,7 +139,7 @@ fn main() {
         .subcommand(
             clap::SubCommand::with_name("open")
                 .about("Open the thread with the web browser")
-                .arg(clap::Arg::with_name("thread_id").index(1)),
+                .arg(clap::Arg::with_name("thread_id").index(1).required(true)),
         )
         .subcommand(clap::SubCommand::with_name("list").about("List all unread subscriptions"))
         .get_matches();
@@ -152,5 +150,5 @@ fn main() {
         ("remove", Some(sub_m)) => sc_remove(sub_m),
         _ => Ok(()),
     }
-    .unwrap_or_else(|e: Error| panic!("{}", e.backtrace()));
+    .unwrap_or_else(|e: Error| panic!("{} :\n{}", e, e.backtrace()));
 }
