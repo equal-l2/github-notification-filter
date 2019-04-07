@@ -1,3 +1,4 @@
+use clap::ArgMatches;
 use failure::{err_msg, Error, Fallible};
 use reqwest::Client;
 
@@ -78,52 +79,62 @@ fn filter_and_unsubscribe(ss: Vec<Subscription>, no_confirm: bool, c: &Client) -
     Ok(())
 }
 
+fn sc_open(m: &ArgMatches) -> Fallible<()> {
+    let c = create_client()?;
+    if let Some(i) = m.value_of("thread_id") {
+        if let Ok(n) = i.parse::<ThreadID>() {
+            Subscription::from_thread_id(&c, n)?.open_thread(&c)?
+        }
+    } else {
+        println!("{}", m.usage());
+    }
+    Ok(())
+}
+
+fn sc_list(_m: &ArgMatches) -> Fallible<()> {
+    let c = create_client()?;
+    let ss = Subscription::fetch_unread(&c)?;
+    for s in ss {
+        println!("{}", s);
+    }
+    Ok(())
+}
+
+fn sc_remove(m: &ArgMatches) -> Fallible<()> {
+    let no_confirm = m.is_present("no-confirm");
+    let c = create_client()?;
+    let ss = Subscription::fetch_unread(&c)?;
+
+    filter_and_unsubscribe(ss, no_confirm, &c)
+}
+
 fn main() {
     let m = clap::App::new("github-notification-filter")
         .version("0.2.0")
-        .arg(
-            clap::Arg::with_name("no-confirm")
-                .help("Do not pause before unsubscription")
-                .long("no-confirm")
-                .short("y"),
+        .setting(clap::AppSettings::SubcommandRequiredElseHelp)
+        .subcommand(
+            clap::SubCommand::with_name("remove")
+                .about("Unsubscribe notifications by regex")
+                .arg(
+                    clap::Arg::with_name("no-confirm")
+                        .help("Do not pause before unsubscription")
+                        .long("no-confirm")
+                        .short("y"),
+                ),
         )
         .subcommand(
             clap::SubCommand::with_name("open")
                 .about("Open the thread with the web browser")
                 .arg(clap::Arg::with_name("thread_id").index(1)),
         )
-        .subcommand(
-            clap::SubCommand::with_name("list")
-                .about("List all unread subscriptions")
-        )
+        .subcommand(clap::SubCommand::with_name("list").about("List all unread subscriptions"))
         .get_matches();
 
-    let c = create_client().unwrap_or_else(|e: Error| panic!("{}", e.backtrace()));
-
-    if let Some(sub_m) = m.subcommand_matches("open") {
-        if let Some(i) = sub_m.value_of("thread_id") {
-            if let Ok(n) = i.parse::<ThreadID>() {
-                Subscription::from_thread_id(&c, n)
-                    .unwrap()
-                    .open_thread(&c)
-                    .unwrap();
-            }
-        } else {
-            println!("{}", m.usage());
-        }
-        return;
+    match m.subcommand() {
+        ("open", Some(sub_m)) => sc_open(sub_m),
+        ("list", Some(sub_m)) => sc_list(sub_m),
+        ("remove", Some(sub_m)) => sc_remove(sub_m),
+        _ => Ok(()),
     }
-
-    let ss = Subscription::fetch_unread(&c).unwrap_or_else(|e: Error| panic!("{}", e.backtrace()));
-    if m.subcommand_matches("list").is_some() {
-        for s in ss {
-            println!("{}", s);
-        }
-        return;
-    }
-
-    let no_confirm = m.is_present("no-confirm");
-
-    filter_and_unsubscribe(ss, no_confirm, &c)
-        .unwrap_or_else(|e: Error| panic!("{}", e.backtrace()));
+    .unwrap_or_else(|e: Error| panic!("{}", e.backtrace()));
 }
