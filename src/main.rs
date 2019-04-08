@@ -128,6 +128,7 @@ fn main() {
         .setting(clap::AppSettings::SubcommandRequiredElseHelp)
         .subcommand(
             clap::SubCommand::with_name("remove")
+                .alias("rm")
                 .about("Unsubscribe notifications by regex")
                 .arg(
                     clap::Arg::with_name("no-confirm")
@@ -141,7 +142,11 @@ fn main() {
                 .about("Open the thread with the web browser")
                 .arg(clap::Arg::with_name("thread_id").index(1).required(true)),
         )
-        .subcommand(clap::SubCommand::with_name("list").about("List all unread subscriptions"))
+        .subcommand(
+            clap::SubCommand::with_name("list")
+                .alias("ls")
+                .about("List all unread subscriptions"),
+        )
         .get_matches();
 
     match m.subcommand() {
