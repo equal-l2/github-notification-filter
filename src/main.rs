@@ -128,7 +128,7 @@ fn main() {
         .setting(clap::AppSettings::SubcommandRequiredElseHelp)
         .subcommand(
             clap::SubCommand::with_name("remove")
-                .alias("rm")
+                .visible_alias("rm")
                 .about("Unsubscribe notifications by regex")
                 .arg(
                     clap::Arg::with_name("no-confirm")
@@ -144,7 +144,7 @@ fn main() {
         )
         .subcommand(
             clap::SubCommand::with_name("list")
-                .alias("ls")
+                .visible_alias("ls")
                 .about("List all unread subscriptions"),
         )
         .get_matches();
