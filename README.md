@@ -32,8 +32,8 @@ If you want to exclude a subscription from unsubscription, write its thread ID i
 
 ## Command
 ```shell
-$ ghnf remove # show you the matched notifications, ask if you want to unsubscribe all
-$ ghnf remove --no-confirm # unsubscribe all notification matched
+$ ghnf remove # unsubscribe all notification matched
+$ ghnf remove -c # show you the matched notifications, ask if you want to unsubscribe all
 
 $ ghnf list # show all unread notifications
 

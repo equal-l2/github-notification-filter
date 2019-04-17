@@ -60,7 +60,7 @@ fn load_ignored() -> Fallible<Vec<ThreadID>> {
         .collect::<Result<Vec<_>, _>>()?)
 }
 
-fn filter_and_unsubscribe(ss: Vec<Subscription>, no_confirm: bool, c: &Client) -> Fallible<()> {
+fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) -> Fallible<()> {
     let re = compile_regex()?;
     let ignore = load_ignored()?;
     let candidates: Vec<_> = ss
@@ -69,7 +69,7 @@ fn filter_and_unsubscribe(ss: Vec<Subscription>, no_confirm: bool, c: &Client) -
         .filter(|s| !ignore.contains(&s.thread_id))
         .collect();
     if !candidates.is_empty() {
-        if !no_confirm {
+        if confirm {
             for s in candidates.iter() {
                 println!("{}", s);
             }
@@ -115,11 +115,11 @@ fn sc_list(_m: &ArgMatches) -> Fallible<()> {
 }
 
 fn sc_remove(m: &ArgMatches) -> Fallible<()> {
-    let no_confirm = m.is_present("no-confirm");
+    let confirm = m.is_present("confirm");
     let c = create_client()?;
     let ss = Subscription::fetch_unread(&c)?;
 
-    filter_and_unsubscribe(ss, no_confirm, &c)
+    filter_and_unsubscribe(ss, confirm, &c)
 }
 
 fn main() {
@@ -131,10 +131,10 @@ fn main() {
                 .visible_alias("rm")
                 .about("Unsubscribe notifications by regex")
                 .arg(
-                    clap::Arg::with_name("no-confirm")
-                        .help("Do not pause before unsubscription")
-                        .long("no-confirm")
-                        .short("y"),
+                    clap::Arg::with_name("confirm")
+                        .help("Pause before unsubscription")
+                        .long("confirm")
+                        .short("c"),
                 ),
         )
         .subcommand(
