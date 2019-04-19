@@ -113,11 +113,10 @@ fn sc_open(m: &ArgMatches) -> Fallible<()> {
             Err(err_msg("unreachable in sc_open"))
         }
     }?;
-    for s in ss {
+    ss.par_iter().map(|s: &Subscription| -> Fallible<()> {
         println!("Open {}", s);
-        s.open_thread(&c)?;
-    }
-    Ok(())
+        s.open_thread(&c)
+    }).collect::<Fallible<()>>()
 }
 
 fn sc_list(m: &ArgMatches) -> Fallible<()> {

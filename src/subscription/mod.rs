@@ -52,8 +52,9 @@ impl Subscription {
     }
 
     pub fn open_thread(&self, c: &Client) -> Fallible<()> {
-        let _ = open::that(self.subject.get_html_url(&c)?);
-        Ok(())
+        open::that(self.subject.get_html_url(&c)?)
+            .map(|_| ()) // discard ExitStatus
+            .map_err(|e| failure::Error::from(e))
     }
 
     pub fn fetch_unread(client: &Client) -> Fallible<Vec<Subscription>> {
