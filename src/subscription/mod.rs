@@ -33,8 +33,8 @@ impl std::fmt::Display for Subscription {
 }
 
 impl Subscription {
-    pub fn from_thread_id(client: &Client, id: ThreadID) -> Fallible<Subscription> {
-        let mut resp = client
+    pub fn from_thread_id(id: ThreadID, c: &Client) -> Fallible<Subscription> {
+        let mut resp = c
             .get(&format!(
                 "https://api.github.com/notifications/threads/{}",
                 id
