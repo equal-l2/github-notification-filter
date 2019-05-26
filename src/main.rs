@@ -27,7 +27,8 @@ fn compile_regex() -> Fallible<Regex> {
 }
 
 fn create_client() -> Fallible<Client> {
-    let token = read_config("token")?
+    let token = read_config("token")
+        .expect("Failed to read GitHub token from ~/.ghnf/token")
         .split('\n')
         .nth(0)
         .ok_or(err_msg("Malformed GitHub Personal Access Token"))?
@@ -142,7 +143,7 @@ fn sc_remove(m: &ArgMatches) -> Fallible<()> {
         if let Some(i) = m.value_of("filter") {
             Regex::new(&i)
         } else {
-            Ok(compile_regex()?)
+            Ok(compile_regex().expect("Failed to read ~/.ghnf/filters"))
         }
     }?;
     let ss = fetch_filtered(&re, &c)?;
