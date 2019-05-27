@@ -5,7 +5,7 @@ use regex::Regex;
 use reqwest::Client;
 
 mod subscription;
-use subscription::{Subscription, ThreadID};
+use subscription::{SubjectState, Subscription, ThreadID};
 
 fn read_config(filename: &str) -> Fallible<String> {
     let path = dirs::home_dir()
@@ -65,9 +65,24 @@ fn load_ignored() -> Fallible<Vec<ThreadID>> {
 fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) -> Fallible<()> {
     let ignore = load_ignored()?;
     let candidates: Vec<_> = ss
-        .into_iter()
+        .into_par_iter()
         .filter(|s| !ignore.contains(&s.thread_id))
         .collect();
+
+    let candidates: Vec<_> = candidates
+        .into_par_iter()
+        .map(|s: Subscription| -> Fallible<Option<Subscription>> {
+            Ok(match s.get_subject_state(c)? {
+                SubjectState::Closed => Some(s),
+                _ => None,
+            })
+        })
+        .collect::<Result<Vec<Option<Subscription>>, _>>()?
+        .into_par_iter()
+        .filter(Option::is_some)
+        .map(|s| s.unwrap())
+        .collect();
+
     if !candidates.is_empty() {
         if confirm {
             for s in candidates.iter() {
@@ -80,8 +95,8 @@ fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) -> F
         }
 
         candidates
-            .par_iter()
-            .map(|s: &Subscription| -> Fallible<()> {
+            .into_par_iter()
+            .map(|s: Subscription| -> Fallible<()> {
                 s.unsubscribe_thread(&c)?;
                 s.mark_a_thread_as_read(&c)?;
                 println!("Unsubscribed {}", s);
@@ -114,10 +129,12 @@ fn sc_open(m: &ArgMatches) -> Fallible<()> {
             Err(err_msg("unreachable in sc_open"))
         }
     }?;
-    ss.par_iter().map(|s: &Subscription| -> Fallible<()> {
-        println!("Open {}", s);
-        s.open_thread(&c)
-    }).collect::<Fallible<()>>()
+    ss.into_par_iter()
+        .map(|s: Subscription| -> Fallible<()> {
+            println!("Open {}", s);
+            s.open_thread(&c)
+        })
+        .collect::<Fallible<()>>()
 }
 
 fn sc_list(m: &ArgMatches) -> Fallible<()> {

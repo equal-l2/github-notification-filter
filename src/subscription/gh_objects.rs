@@ -1,7 +1,3 @@
-use failure::{err_msg, format_err, Fallible};
-use reqwest::Client;
-use serde_json::Value;
-
 #[derive(Clone, Debug, serde::Deserialize)]
 pub struct Notification {
     pub subject: Subject,
@@ -27,31 +23,12 @@ pub struct Subject {
     //latest_comment_url: Option<String>,
 }
 
-impl Subject {
-    pub fn get_html_url(&self, client: &Client) -> Fallible<String> {
-        let mut resp = client.get(&self.url).send()?;
-
-        if resp.status() != 200 {
-            Err(err_msg(format_err!(
-                "Unexpected HTTP Status {} (Expected 200)",
-                resp.status()
-            )))?
-        }
-
-        Ok(resp.json::<Value>()?["html_url"]
-            .as_str()
-            .unwrap()
-            .to_owned())
-    }
-}
-
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 #[serde(field_identifier)]
 pub enum SubjectType {
     Issue,
     PullRequest,
     Commit,
-    Other(String),
 }
 
 impl std::fmt::Display for SubjectType {
@@ -60,7 +37,21 @@ impl std::fmt::Display for SubjectType {
             SubjectType::Issue => write!(f, "Issue"),
             SubjectType::PullRequest => write!(f, "Pull Request"),
             SubjectType::Commit => write!(f, "Commit"),
-            SubjectType::Other(i) => write!(f, "\"{}\"", i),
         }
     }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SubjectState {
+    Open,
+    Closed,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct SubjectDetail {
+    pub url: String,
+    pub html_url: String,
+    pub state: SubjectState,
+    pub title: String,
 }

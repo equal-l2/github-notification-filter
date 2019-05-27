@@ -1,9 +1,11 @@
 use failure::{err_msg, format_err, Fallible};
 use reqwest::Client;
 use serde_json::json;
+use std::cell::RefCell;
 
 mod gh_objects;
 use gh_objects::Notification;
+pub use gh_objects::SubjectState;
 
 pub type ThreadID = u64;
 
@@ -11,6 +13,7 @@ pub type ThreadID = u64;
 pub struct Subscription {
     pub subject: gh_objects::Subject,
     pub thread_id: ThreadID,
+    subject_detail: std::cell::RefCell<Option<gh_objects::SubjectDetail>>,
 }
 
 impl From<Notification> for Subscription {
@@ -18,6 +21,7 @@ impl From<Notification> for Subscription {
         Self {
             subject: n.subject,
             thread_id: n.url.split('/').last().unwrap().parse().unwrap(),
+            subject_detail: RefCell::new(None),
         }
     }
 }
@@ -52,7 +56,7 @@ impl Subscription {
     }
 
     pub fn open_thread(&self, c: &Client) -> Fallible<()> {
-        open::that(self.subject.get_html_url(&c)?)
+        open::that(self.get_html_url(&c)?)
             .map(|_| ()) // discard ExitStatus
             .map_err(|e| failure::Error::from(e))
     }
@@ -123,6 +127,40 @@ impl Subscription {
             )))?
         }
 
+        Ok(())
+    }
+
+    pub fn get_html_url(&self, c: &Client) -> Fallible<String> {
+        if self.subject_detail.borrow().is_none() {
+            self.fetch_subject_detail(c)?;
+        }
+        Ok(self
+            .subject_detail
+            .borrow()
+            .as_ref()
+            .unwrap()
+            .html_url
+            .to_owned())
+    }
+
+    pub fn get_subject_state(&self, c: &Client) -> Fallible<gh_objects::SubjectState> {
+        if self.subject_detail.borrow().is_none() {
+            self.fetch_subject_detail(c)?;
+        }
+        Ok(self.subject_detail.borrow().as_ref().unwrap().state)
+    }
+
+    fn fetch_subject_detail(&self, c: &Client) -> Fallible<()> {
+        let mut resp = c.get(&self.subject.url).send()?;
+        if resp.status() != 200 {
+            Err(err_msg(format_err!(
+                "Unexpected HTTP Status {} (Expected 200)",
+                resp.status()
+            )))?
+        }
+
+        let result: gh_objects::SubjectDetail = resp.json()?;
+        *self.subject_detail.borrow_mut() = Some(result);
         Ok(())
     }
 }
