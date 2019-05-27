@@ -1,7 +1,7 @@
 use failure::{err_msg, format_err, Fallible};
 use reqwest::Client;
 use serde_json::json;
-use std::cell::RefCell;
+use std::sync::RwLock;
 
 mod gh_objects;
 use gh_objects::Notification;
@@ -9,11 +9,11 @@ pub use gh_objects::SubjectState;
 
 pub type ThreadID = u64;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Subscription {
     pub subject: gh_objects::Subject,
     pub thread_id: ThreadID,
-    subject_detail: std::cell::RefCell<Option<gh_objects::SubjectDetail>>,
+    subject_detail: RwLock<Option<gh_objects::SubjectDetail>>,
 }
 
 impl From<Notification> for Subscription {
@@ -21,7 +21,7 @@ impl From<Notification> for Subscription {
         Self {
             subject: n.subject,
             thread_id: n.url.split('/').last().unwrap().parse().unwrap(),
-            subject_detail: RefCell::new(None),
+            subject_detail: RwLock::new(None),
         }
     }
 }
@@ -133,19 +133,21 @@ impl Subscription {
     }
 
     pub fn get_html_url(&self, c: &Client) -> Fallible<String> {
-        let content = self.subject_detail.borrow();
-        if content.is_none() {
+        // self.subject_detail.read() cannot be in a variable
+        // because it prevents anyone from writing to subject_detail while it lives
+        if self.subject_detail.read().unwrap().is_none() {
             self.fetch_subject_detail(c)?;
         }
-        Ok(content.as_ref().unwrap().html_url.to_owned())
+        Ok(self.subject_detail.read().unwrap().as_ref().unwrap().html_url.to_owned())
     }
 
     pub fn get_subject_state(&self, c: &Client) -> Fallible<gh_objects::SubjectState> {
-        let content = self.subject_detail.borrow();
-        if content.is_none() {
+        // self.subject_detail.read() cannot be in a variable
+        // because it prevents anyone from writing to subject_detail while it lives
+        if self.subject_detail.read().unwrap().is_none() {
             self.fetch_subject_detail(c)?;
         }
-        Ok(content.as_ref().unwrap().state)
+        Ok(self.subject_detail.read().unwrap().as_ref().unwrap().state)
     }
 
     fn fetch_subject_detail(&self, c: &Client) -> Fallible<()> {
@@ -156,9 +158,8 @@ impl Subscription {
                 resp.status()
             )));
         }
-
         let result: gh_objects::SubjectDetail = resp.json()?;
-        *self.subject_detail.borrow_mut() = Some(result);
+        *self.subject_detail.write().unwrap() = Some(result);
         Ok(())
     }
 }
