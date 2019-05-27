@@ -65,6 +65,7 @@ fn load_ignored() -> Fallible<Vec<ThreadID>> {
 
 fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) -> Fallible<()> {
     let ignore = load_ignored().expect("Failed to read GitHub token from ~/.ghnf/token");
+    println!("Filtering out open notifications...");
     let candidates: Vec<Subscription> = ss
         .into_par_iter()
         // filter ignored threads
@@ -90,6 +91,7 @@ fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) -> F
             let _ = std::io::stdin().read_line(&mut s)?;
         }
 
+        println!("Unsubscribing notifications...");
         candidates
             .into_par_iter()
             .map(|s| -> _ {
@@ -108,8 +110,9 @@ fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) -> F
 
 fn fetch_filtered(re: &Regex, c: &Client) -> Fallible<Vec<Subscription>> {
     let ss = Subscription::fetch_unread(&c)?;
+    println!("Fetched {} notifications", ss.len());
     Ok(ss
-        .into_iter()
+        .into_par_iter()
         .filter(|s| re.is_match(&s.subject.title))
         .collect())
 }
@@ -159,7 +162,9 @@ fn sc_remove(m: &ArgMatches) -> Fallible<()> {
             compile_regex()
         }
     }?;
+    println!("Fetching and filtering notifications...");
     let ss = fetch_filtered(&re, &c)?;
+    println!("{} notifications left", ss.len());
 
     filter_and_unsubscribe(ss, confirm, &c)
 }
