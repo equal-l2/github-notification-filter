@@ -46,34 +46,36 @@ impl Subscription {
             .send()?;
 
         if resp.status() != 200 {
-            Err(err_msg(format_err!(
+            return Err(err_msg(format_err!(
                 "Unexpected HTTP Status {} (Expected 200)",
                 resp.status()
-            )))?
+            )));
         }
 
-        Ok(resp.json::<Notification>()?.into())
+        resp.json::<Notification>()
+            .map_err(Into::into)
+            .map(Into::into)
     }
 
     pub fn open_thread(&self, c: &Client) -> Fallible<()> {
         open::that(self.get_html_url(&c)?)
             .map(|_| ()) // discard ExitStatus
-            .map_err(|e| failure::Error::from(e))
+            .map_err(Into::into)
     }
 
     pub fn fetch_unread(client: &Client) -> Fallible<Vec<Subscription>> {
         let mut resp = client.get("https://api.github.com/notifications").send()?;
 
         if resp.status() != 200 {
-            Err(err_msg(format_err!(
+            return Err(err_msg(format_err!(
                 "Unexpected HTTP Status {} (Expected 200)",
                 resp.status()
-            )))?
+            )));
         }
 
-        let mut ss = {
+        let mut ss: Vec<_> = {
             let ns: Vec<Notification> = resp.json()?;
-            ns.into_iter().map(Subscription::from).collect::<Vec<_>>()
+            ns.into_iter().map(Into::into).collect()
         };
 
         for i in 2.. {
@@ -84,7 +86,7 @@ impl Subscription {
             if resp.status() == 200 {
                 let ns: Vec<Notification> = resp.json()?;
                 if !ns.is_empty() {
-                    ss.extend(ns.into_iter().map(Subscription::from));
+                    ss.extend(ns.into_iter().map(Into::into));
                     continue;
                 }
             }
@@ -103,10 +105,10 @@ impl Subscription {
             .send()?;
 
         if resp.status() != 200 {
-            Err(err_msg(format_err!(
+            return Err(err_msg(format_err!(
                 "Unexpected HTTP Status {} (Expected 200)",
                 resp.status()
-            )))?
+            )));
         }
 
         Ok(())
@@ -121,42 +123,38 @@ impl Subscription {
             .send()?;
 
         if resp.status() != 205 {
-            Err(err_msg(format_err!(
+            return Err(err_msg(format_err!(
                 "Unexpected HTTP Status {} (Expected 205)",
                 resp.status()
-            )))?
+            )));
         }
 
         Ok(())
     }
 
     pub fn get_html_url(&self, c: &Client) -> Fallible<String> {
-        if self.subject_detail.borrow().is_none() {
+        let content = self.subject_detail.borrow();
+        if content.is_none() {
             self.fetch_subject_detail(c)?;
         }
-        Ok(self
-            .subject_detail
-            .borrow()
-            .as_ref()
-            .unwrap()
-            .html_url
-            .to_owned())
+        Ok(content.as_ref().unwrap().html_url.to_owned())
     }
 
     pub fn get_subject_state(&self, c: &Client) -> Fallible<gh_objects::SubjectState> {
-        if self.subject_detail.borrow().is_none() {
+        let content = self.subject_detail.borrow();
+        if content.is_none() {
             self.fetch_subject_detail(c)?;
         }
-        Ok(self.subject_detail.borrow().as_ref().unwrap().state)
+        Ok(content.as_ref().unwrap().state)
     }
 
     fn fetch_subject_detail(&self, c: &Client) -> Fallible<()> {
         let mut resp = c.get(&self.subject.url).send()?;
         if resp.status() != 200 {
-            Err(err_msg(format_err!(
+            return Err(err_msg(format_err!(
                 "Unexpected HTTP Status {} (Expected 200)",
                 resp.status()
-            )))?
+            )));
         }
 
         let result: gh_objects::SubjectDetail = resp.json()?;

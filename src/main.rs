@@ -12,7 +12,7 @@ fn read_config(filename: &str) -> Fallible<String> {
         .ok_or(err_msg("Failed to read ~/"))?
         .join(".ghnf")
         .join(filename);
-    Ok(std::fs::read_to_string(path)?)
+    std::fs::read_to_string(path).map_err(Into::into)
 }
 
 fn compile_regex() -> Fallible<Regex> {
@@ -23,7 +23,7 @@ fn compile_regex() -> Fallible<Regex> {
         .collect();
 
     let filters_string = String::from(r"(?i)") + &filters.join("|");
-    Ok(Regex::new(&filters_string)?)
+    Regex::new(&filters_string).map_err(Into::into)
 }
 
 fn create_client() -> Fallible<Client> {
@@ -38,15 +38,16 @@ fn create_client() -> Fallible<Client> {
         reqwest::header::AUTHORIZATION,
         reqwest::header::HeaderValue::from_str(&format!("token {}", token))?,
     );
-    Ok(reqwest::Client::builder()
+    reqwest::Client::builder()
         .default_headers(headers)
-        .build()?)
+        .build()
+        .map_err(Into::into)
 }
 
 fn load_ignored() -> Fallible<Vec<ThreadID>> {
     // `ignore` is optional, return empty vec when not found
-    Ok(read_config("ignore")
-        .or_else(|e: failure::Error| -> _ {
+    read_config("ignore")
+        .or_else(|e| -> _ {
             if let Some(i) = e.as_fail().downcast_ref::<std::io::Error>() {
                 match i.kind() {
                     std::io::ErrorKind::NotFound => Ok("".into()),
@@ -58,30 +59,25 @@ fn load_ignored() -> Fallible<Vec<ThreadID>> {
         })?
         .split('\n')
         .filter(|s| !s.is_empty())
-        .map(|s| s.parse())
-        .collect::<Result<Vec<_>, _>>()?)
+        .map(|s| s.parse::<ThreadID>().map_err(Into::into))
+        .collect()
 }
 
 fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) -> Fallible<()> {
-    let ignore = load_ignored()?;
-    let candidates: Vec<_> = ss
+    let ignore = load_ignored().expect("Failed to read GitHub token from ~/.ghnf/token");
+    let candidates: Vec<Subscription> = ss
         .into_par_iter()
+        // filter ignored threads
         .filter(|s| !ignore.contains(&s.thread_id))
-        .collect();
-
-    let candidates: Vec<_> = candidates
-        .into_par_iter()
-        .map(|s: Subscription| -> Fallible<Option<Subscription>> {
+        // filter open threads
+        .map(|s| -> _ {
             Ok(match s.get_subject_state(c)? {
                 SubjectState::Closed => Some(s),
                 _ => None,
             })
         })
-        .collect::<Result<Vec<Option<Subscription>>, _>>()?
-        .into_par_iter()
-        .filter(Option::is_some)
-        .map(|s| s.unwrap())
-        .collect();
+        .filter_map(Fallible::transpose)
+        .collect::<Fallible<_>>()?;
 
     if !candidates.is_empty() {
         if confirm {
@@ -96,13 +92,13 @@ fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) -> F
 
         candidates
             .into_par_iter()
-            .map(|s: Subscription| -> Fallible<()> {
+            .map(|s| -> _ {
                 s.unsubscribe_thread(&c)?;
                 s.mark_a_thread_as_read(&c)?;
                 println!("Unsubscribed {}", s);
                 Ok(())
             })
-            .collect::<Result<(), _>>()?;
+            .collect::<Fallible<_>>()?;
     } else {
         println!("No notification matched");
     }
@@ -115,14 +111,14 @@ fn fetch_filtered(re: &Regex, c: &Client) -> Fallible<Vec<Subscription>> {
     Ok(ss
         .into_iter()
         .filter(|s| re.is_match(&s.subject.title))
-        .collect::<Vec<_>>())
+        .collect())
 }
 
 fn sc_open(m: &ArgMatches) -> Fallible<()> {
     let c = create_client()?;
     let ss: Vec<Subscription> = {
         if let Some(i) = m.value_of("filter") {
-            Ok(fetch_filtered(&Regex::new(i)?, &c)?)
+            fetch_filtered(&Regex::new(i)?, &c)
         } else if let Ok(i) = m.value_of("thread_id").unwrap().parse() {
             Ok(vec![Subscription::from_thread_id(i, &c)?])
         } else {
@@ -130,11 +126,11 @@ fn sc_open(m: &ArgMatches) -> Fallible<()> {
         }
     }?;
     ss.into_par_iter()
-        .map(|s: Subscription| -> Fallible<()> {
+        .map(|s| -> _ {
             println!("Open {}", s);
             s.open_thread(&c)
         })
-        .collect::<Fallible<()>>()
+        .collect()
 }
 
 fn sc_list(m: &ArgMatches) -> Fallible<()> {
@@ -158,9 +154,9 @@ fn sc_remove(m: &ArgMatches) -> Fallible<()> {
     let c = create_client()?;
     let re = {
         if let Some(i) = m.value_of("filter") {
-            Regex::new(&i)
+            Regex::new(&i).map_err(Into::into)
         } else {
-            Ok(compile_regex().expect("Failed to read ~/.ghnf/filters"))
+            compile_regex()
         }
     }?;
     let ss = fetch_filtered(&re, &c)?;
