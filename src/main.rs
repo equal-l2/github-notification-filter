@@ -109,8 +109,10 @@ fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) -> F
 }
 
 fn fetch_filtered(re: &Regex, c: &Client) -> Fallible<Vec<Subscription>> {
+    println!("Fetching notifications...");
     let ss = Subscription::fetch_unread(&c)?;
     println!("Fetched {} notifications", ss.len());
+    println!("Filtering notifications by regex...");
     Ok(ss
         .into_par_iter()
         .filter(|s| re.is_match(&s.subject.title))
@@ -162,11 +164,26 @@ fn sc_remove(m: &ArgMatches) -> Fallible<()> {
             compile_regex()
         }
     }?;
-    println!("Fetching and filtering notifications...");
+
     let ss = fetch_filtered(&re, &c)?;
     println!("{} notifications left", ss.len());
 
     filter_and_unsubscribe(ss, confirm, &c)
+}
+
+fn sc_request(m: &ArgMatches) -> Fallible<()> {
+    let url = m.value_of("URL").unwrap();
+    let c = create_client()?;
+    let mut resp = c.get(url).send()?;
+    if resp.status() != 200 {
+        println!("Failed to GET, status code: {}", resp.status());
+        if let Ok(i) = resp.text() {
+            println!("{}", i);
+        }
+    } else {
+        println!("{}", resp.text().unwrap());
+    }
+    Ok(())
 }
 
 fn main() {
@@ -218,12 +235,23 @@ fn main() {
                         .takes_value(true),
                 ),
         )
+        .subcommand(
+            clap::SubCommand::with_name("request")
+                .visible_alias("req")
+                .about("Make a GET request to URL using ~/.ghnf/token (for devs)")
+                .arg(
+                    clap::Arg::with_name("URL")
+                        .index(1)
+                        .required(true)
+                ),
+        )
         .get_matches();
 
     match m.subcommand() {
         ("open", Some(sub_m)) => sc_open(sub_m),
         ("list", Some(sub_m)) => sc_list(sub_m),
         ("remove", Some(sub_m)) => sc_remove(sub_m),
+        ("request", Some(sub_m)) => sc_request(sub_m),
         _ => Ok(()),
     }
     .unwrap_or_else(|e: Error| panic!("{} :\n{}", e, e.backtrace()));
