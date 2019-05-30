@@ -52,6 +52,6 @@ pub enum SubjectState {
 pub struct SubjectDetail {
     pub url: String,
     pub html_url: String,
-    pub state: SubjectState,
-    pub title: String,
+    pub state: Option<SubjectState>, // doesn't exist for commits
+    pub title: Option<String>,       // doesn't exist for commits
 }

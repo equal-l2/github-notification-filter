@@ -141,7 +141,7 @@ impl Subscription {
         Ok(self.subject_detail.read().unwrap().as_ref().unwrap().html_url.to_owned())
     }
 
-    pub fn get_subject_state(&self, c: &Client) -> Fallible<gh_objects::SubjectState> {
+    pub fn get_subject_state(&self, c: &Client) -> Fallible<Option<gh_objects::SubjectState>> {
         // self.subject_detail.read() cannot be in a variable
         // because it prevents anyone from writing to subject_detail while it lives
         if self.subject_detail.read().unwrap().is_none() {

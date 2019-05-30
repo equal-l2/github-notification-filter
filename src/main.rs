@@ -73,7 +73,7 @@ fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) -> F
         // filter open threads
         .map(|s| -> _ {
             Ok(match s.get_subject_state(c)? {
-                SubjectState::Closed => Some(s),
+                Some(SubjectState::Closed) => Some(s),
                 _ => None,
             })
         })
