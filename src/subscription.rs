@@ -138,7 +138,14 @@ impl Subscription {
         if self.subject_detail.read().unwrap().is_none() {
             self.fetch_subject_detail(c)?;
         }
-        Ok(self.subject_detail.read().unwrap().as_ref().unwrap().html_url.to_owned())
+        Ok(self
+            .subject_detail
+            .read()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .html_url
+            .to_owned())
     }
 
     pub fn get_subject_state(&self, c: &Client) -> Fallible<Option<gh_objects::SubjectState>> {
