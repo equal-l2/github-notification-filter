@@ -3,7 +3,7 @@ mod util;
 
 use crate::subscription::Subscription;
 use clap::ArgMatches;
-use failure::{err_msg, Error, Fallible};
+use failure::{err_msg, format_err, Error, Fallible};
 use rayon::prelude::*;
 use regex::Regex;
 
@@ -12,10 +12,23 @@ fn sc_open(m: &ArgMatches) -> Fallible<()> {
     let ss: Vec<Subscription> = {
         if let Some(i) = m.value_of("filter") {
             util::fetch_filtered(&Regex::new(i)?, &c)
-        } else if let Ok(i) = m.value_of("thread_id").unwrap().parse() {
-            Ok(vec![Subscription::from_thread_id(i, &c)?])
+        } else if let Some(i) = m.values_of("thread_ids") {
+            let mut ids = vec![];
+            for v in i {
+                let id_str = v.parse();
+                if let Ok(id) = id_str {
+                    if let Ok(s) = Subscription::from_thread_id(id, &c) {
+                        ids.push(s);
+                    } else {
+                        return Err(err_msg(format_err!("could not retrieve: {}", id)));
+                    }
+                } else {
+                    return Err(err_msg(format_err!("malformed input: {}", v)));
+                }
+            }
+            Ok(ids)
         } else {
-            Err(err_msg("unreachable in sc_open"))
+            unreachable!();
         }
     }?;
     ss.into_par_iter()
@@ -91,16 +104,15 @@ fn main() {
                         .help("regex to filter")
                         .long("filter")
                         .short("f")
-                        .takes_value(true)
-                        .conflicts_with("thread_id"),
+                        .takes_value(true),
                 ]),
         )
         .subcommand(
             clap::SubCommand::with_name("open")
                 .about("Open a thread, or all filtered thread with the web browser")
                 .args(&[
-                    clap::Arg::with_name("thread_id")
-                        .index(1)
+                    clap::Arg::with_name("thread_ids")
+                        .min_values(1)
                         .required(true)
                         .conflicts_with("filter"),
                     clap::Arg::with_name("filter")
@@ -108,7 +120,7 @@ fn main() {
                         .long("filter")
                         .short("f")
                         .takes_value(true)
-                        .conflicts_with("thread_id"),
+                        .conflicts_with("thread_ids"),
                 ]),
         )
         .subcommand(
