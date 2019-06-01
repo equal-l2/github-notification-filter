@@ -2,7 +2,7 @@ mod subscription;
 mod util;
 
 use crate::subscription::Subscription;
-use clap::ArgMatches;
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
 use failure::{err_msg, format_err, Error, Fallible};
 use rayon::prelude::*;
 use regex::Regex;
@@ -88,19 +88,19 @@ fn sc_request(m: &ArgMatches) -> Fallible<()> {
 }
 
 fn main() {
-    let m = clap::App::new("github-notification-filter")
-        .version("0.2.0")
-        .setting(clap::AppSettings::SubcommandRequiredElseHelp)
+    let m = App::new("github-notification-filter")
+        .version(format!("{} (built at {})", crate_version!(), env!("BUILD_DATE")).as_str())
+        .setting(AppSettings::SubcommandRequiredElseHelp)
         .subcommand(
-            clap::SubCommand::with_name("remove")
+            SubCommand::with_name("remove")
                 .visible_alias("rm")
                 .about("Unsubscribe notifications by regex")
                 .args(&[
-                    clap::Arg::with_name("confirm")
+                    Arg::with_name("confirm")
                         .help("Pause before unsubscription")
                         .long("confirm")
                         .short("c"),
-                    clap::Arg::with_name("filter")
+                    Arg::with_name("filter")
                         .help("regex to filter")
                         .long("filter")
                         .short("f")
@@ -108,14 +108,14 @@ fn main() {
                 ]),
         )
         .subcommand(
-            clap::SubCommand::with_name("open")
+            SubCommand::with_name("open")
                 .about("Open a thread, or all filtered thread with the web browser")
                 .args(&[
-                    clap::Arg::with_name("thread_ids")
+                    Arg::with_name("thread_ids")
                         .min_values(1)
                         .required(true)
                         .conflicts_with("filter"),
-                    clap::Arg::with_name("filter")
+                    Arg::with_name("filter")
                         .help("regex to filter")
                         .long("filter")
                         .short("f")
@@ -124,11 +124,11 @@ fn main() {
                 ]),
         )
         .subcommand(
-            clap::SubCommand::with_name("list")
+            SubCommand::with_name("list")
                 .visible_alias("ls")
                 .about("List unread subscriptions")
                 .arg(
-                    clap::Arg::with_name("filter")
+                    Arg::with_name("filter")
                         .help("regex to filter")
                         .long("filter")
                         .short("f")
@@ -136,10 +136,10 @@ fn main() {
                 ),
         )
         .subcommand(
-            clap::SubCommand::with_name("request")
+            SubCommand::with_name("request")
                 .visible_alias("req")
                 .about("Make a GET request to URL using ~/.ghnf/token (for devs)")
-                .arg(clap::Arg::with_name("URL").index(1).required(true)),
+                .arg(Arg::with_name("URL").index(1).required(true)),
         )
         .get_matches();
 
