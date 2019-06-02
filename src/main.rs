@@ -1,3 +1,6 @@
+#![warn(rust_2018_idioms)]
+#![warn(rust_2018_compatibility)]
+#![warn(future_incompatible)]
 mod subscription;
 mod util;
 
@@ -7,7 +10,7 @@ use failure::{err_msg, format_err, Error, Fallible};
 use rayon::prelude::*;
 use regex::Regex;
 
-fn sc_open(m: &ArgMatches) -> Fallible<()> {
+fn sc_open(m: &ArgMatches<'_>) -> Fallible<()> {
     let c = util::create_client()?;
     let ss: Vec<Subscription> = {
         if let Some(i) = m.value_of("filter") {
@@ -39,7 +42,7 @@ fn sc_open(m: &ArgMatches) -> Fallible<()> {
         .collect()
 }
 
-fn sc_list(m: &ArgMatches) -> Fallible<()> {
+fn sc_list(m: &ArgMatches<'_>) -> Fallible<()> {
     let c = util::create_client()?;
     let ss: Vec<_> = {
         Ok(if let Some(i) = m.value_of("filter") {
@@ -55,7 +58,7 @@ fn sc_list(m: &ArgMatches) -> Fallible<()> {
     Ok(())
 }
 
-fn sc_remove(m: &ArgMatches) -> Fallible<()> {
+fn sc_remove(m: &ArgMatches<'_>) -> Fallible<()> {
     let confirm = m.is_present("confirm");
     let c = util::create_client()?;
     let re = {
@@ -72,7 +75,7 @@ fn sc_remove(m: &ArgMatches) -> Fallible<()> {
     util::filter_and_unsubscribe(ss, confirm, &c)
 }
 
-fn sc_request(m: &ArgMatches) -> Fallible<()> {
+fn sc_request(m: &ArgMatches<'_>) -> Fallible<()> {
     let url = m.value_of("URL").unwrap();
     let c = util::create_client()?;
     let mut resp = c.get(url).send()?;

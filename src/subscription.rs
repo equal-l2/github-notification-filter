@@ -27,7 +27,7 @@ impl From<Notification> for Subscription {
 }
 
 impl std::fmt::Display for Subscription {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{} : {} ({})",
