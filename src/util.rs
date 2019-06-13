@@ -13,7 +13,8 @@ pub fn read_config(filename: &str) -> Fallible<String> {
 }
 
 pub fn compile_regex() -> Fallible<Regex> {
-    let filters: Vec<_> = read_config("filters")?
+    let filters: Vec<_> = read_config("filters")
+        .expect("Failed to read filters from ~/.ghnf/filters")
         .split('\n')
         .filter(|s| !s.is_empty())
         .map(String::from)
