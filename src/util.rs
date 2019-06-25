@@ -61,22 +61,34 @@ pub fn load_ignored() -> Fallible<Vec<ThreadID>> {
         .collect()
 }
 
-pub fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) -> Fallible<()> {
-    let ignore = load_ignored().expect("Failed to read GitHub token from ~/.ghnf/token");
-    println!("Filtering out open notifications...");
-    let candidates: Vec<Subscription> = ss
+pub fn filter_ignored(ss: Vec<Subscription>) -> Fallible<Vec<Subscription>> {
+    let ignore = load_ignored().expect("Failed to read GitHub token from ~/.ghnf/ignored");
+    Ok(ss
         .into_par_iter()
-        // filter ignored threads
         .filter(|s| !ignore.contains(&s.thread_id))
-        // filter open threads
+        .collect())
+}
+
+pub fn filter_by_subject_state(
+    ss: Vec<Subscription>,
+    state: SubjectState,
+    c: &Client,
+) -> Fallible<Vec<Subscription>> {
+    ss.into_par_iter()
         .map(|s| -> _ {
             Ok(match s.get_subject_state(c)? {
-                Some(SubjectState::Closed) => Some(s),
-                _ => None,
+                Some(i) => if i == state { Some(s) } else {None}
+                _ => None
             })
         })
         .filter_map(Fallible::transpose)
-        .collect::<Fallible<_>>()?;
+        .collect()
+}
+
+pub fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) -> Fallible<()> {
+    println!("Filtering out open notifications...");
+    let candidates: Vec<Subscription> =
+        filter_by_subject_state(filter_ignored(ss).unwrap(), SubjectState::Closed, c)?;
 
     if !candidates.is_empty() {
         if confirm {
