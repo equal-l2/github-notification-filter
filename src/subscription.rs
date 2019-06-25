@@ -13,6 +13,7 @@ pub type ThreadID = u64;
 pub struct Subscription {
     pub subject: gh_objects::Subject,
     pub thread_id: ThreadID,
+    pub repo_name: String,
     subject_detail: RwLock<Option<gh_objects::SubjectDetail>>,
 }
 
@@ -21,6 +22,7 @@ impl From<Notification> for Subscription {
         Self {
             subject: n.subject,
             thread_id: n.url.split('/').last().unwrap().parse().unwrap(),
+            repo_name: n.repository.full_name,
             subject_detail: RwLock::new(None),
         }
     }
@@ -30,8 +32,8 @@ impl std::fmt::Display for Subscription {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{} : {} ({})",
-            self.subject.r#type, self.subject.title, self.thread_id
+            "[{}] {} : {} ({})",
+            self.subject.r#type, self.repo_name, self.subject.title, self.thread_id
         )
     }
 }
