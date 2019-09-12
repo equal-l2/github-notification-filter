@@ -1,5 +1,5 @@
 use failure::{err_msg, format_err, Fallible};
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde_json::json;
 use std::sync::RwLock;
 
@@ -38,6 +38,19 @@ impl std::fmt::Display for Subscription {
     }
 }
 
+fn format_unexpected_status(
+    expected: StatusCode,
+    actual: StatusCode,
+    body: String,
+) -> failure::Error {
+    err_msg(format_err!(
+        "Unexpected HTTP Status {} (Expected {})\nMessage: {}",
+        actual,
+        expected,
+        body
+    ))
+}
+
 impl Subscription {
     pub fn from_thread_id(id: ThreadID, c: &Client) -> Fallible<Subscription> {
         let mut resp = c
@@ -48,10 +61,11 @@ impl Subscription {
             .send()?;
 
         if resp.status() != 200 {
-            return Err(err_msg(format_err!(
-                "Unexpected HTTP Status {} (Expected 200)",
-                resp.status()
-            )));
+            return Err(format_unexpected_status(
+                StatusCode::from_u16(200).unwrap(),
+                resp.status(),
+                resp.text().unwrap_or(String::from("<Failed to get body>")),
+            ));
         }
 
         resp.json::<Notification>()
@@ -69,10 +83,11 @@ impl Subscription {
         let mut resp = client.get("https://api.github.com/notifications").send()?;
 
         if resp.status() != 200 {
-            return Err(err_msg(format_err!(
-                "Unexpected HTTP Status {} (Expected 200)",
-                resp.status()
-            )));
+            return Err(format_unexpected_status(
+                StatusCode::from_u16(200).unwrap(),
+                resp.status(),
+                resp.text().unwrap_or(String::from("<Failed to get body>")),
+            ));
         }
 
         let mut ss: Vec<_> = {
@@ -98,7 +113,7 @@ impl Subscription {
     }
 
     pub fn unsubscribe_thread(&self, client: &Client) -> Fallible<()> {
-        let resp = client
+        let mut resp = client
             .put(&format!(
                 "https://api.github.com/notifications/threads/{}/subscription",
                 self.thread_id
@@ -107,17 +122,18 @@ impl Subscription {
             .send()?;
 
         if resp.status() != 200 {
-            return Err(err_msg(format_err!(
-                "Unexpected HTTP Status {} (Expected 200)",
-                resp.status()
-            )));
+            return Err(format_unexpected_status(
+                StatusCode::from_u16(200).unwrap(),
+                resp.status(),
+                resp.text().unwrap_or(String::from("<Failed to get body>")),
+            ));
         }
 
         Ok(())
     }
 
     pub fn mark_a_thread_as_read(&self, client: &Client) -> Fallible<()> {
-        let resp = client
+        let mut resp = client
             .patch(&format!(
                 "https://api.github.com/notifications/threads/{}",
                 self.thread_id
@@ -125,10 +141,11 @@ impl Subscription {
             .send()?;
 
         if resp.status() != 205 {
-            return Err(err_msg(format_err!(
-                "Unexpected HTTP Status {} (Expected 205)",
-                resp.status()
-            )));
+            return Err(format_unexpected_status(
+                StatusCode::from_u16(205).unwrap(),
+                resp.status(),
+                resp.text().unwrap_or(String::from("<Failed to get body>")),
+            ));
         }
 
         Ok(())
@@ -162,10 +179,11 @@ impl Subscription {
     fn fetch_subject_detail(&self, c: &Client) -> Fallible<()> {
         let mut resp = c.get(&self.subject.url).send()?;
         if resp.status() != 200 {
-            return Err(err_msg(format_err!(
-                "Unexpected HTTP Status {} (Expected 200)",
-                resp.status()
-            )));
+            return Err(format_unexpected_status(
+                StatusCode::from_u16(200).unwrap(),
+                resp.status(),
+                resp.text().unwrap_or(String::from("<Failed to get body>")),
+            ));
         }
         let result: gh_objects::SubjectDetail = resp.json()?;
         *self.subject_detail.write().unwrap() = Some(result);
