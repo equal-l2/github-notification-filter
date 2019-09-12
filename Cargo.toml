@@ -1,6 +1,6 @@
 [package]
 name = "github-notification-filter"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["equal-l2 <eng.equall2@gmail.com>"]
 edition = "2018"
 license = "MIT OR APACHE-2.0"
