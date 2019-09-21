@@ -58,5 +58,5 @@ pub struct SubjectDetail {
 
 #[derive(Clone, Debug, serde::Deserialize)]
 pub struct Repository {
-    pub full_name: String
+    pub full_name: String,
 }

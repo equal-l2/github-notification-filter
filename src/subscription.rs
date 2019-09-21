@@ -41,29 +41,28 @@ impl std::fmt::Display for Subscription {
 fn format_unexpected_status(
     expected: StatusCode,
     actual: StatusCode,
+    url: &str,
     body: String,
 ) -> failure::Error {
     err_msg(format_err!(
-        "Unexpected HTTP Status {} (Expected {})\nMessage: {}",
+        "Unexpected HTTP Status {} (Expected {})\nURL: {}\nBody: {}",
         actual,
         expected,
+        url,
         body
     ))
 }
 
 impl Subscription {
     pub fn from_thread_id(id: ThreadID, c: &Client) -> Fallible<Subscription> {
-        let mut resp = c
-            .get(&format!(
-                "https://api.github.com/notifications/threads/{}",
-                id
-            ))
-            .send()?;
+        let url = format!("https://api.github.com/notifications/threads/{}", id);
+        let mut resp = c.get(&url).send()?;
 
         if resp.status() != 200 {
             return Err(format_unexpected_status(
                 StatusCode::from_u16(200).unwrap(),
                 resp.status(),
+                &url,
                 resp.text().unwrap_or(String::from("<Failed to get body>")),
             ));
         }
@@ -80,12 +79,14 @@ impl Subscription {
     }
 
     pub fn fetch_unread(client: &Client) -> Fallible<Vec<Subscription>> {
-        let mut resp = client.get("https://api.github.com/notifications").send()?;
+        let url = "https://api.github.com/notifications";
+        let mut resp = client.get(url).send()?;
 
         if resp.status() != 200 {
             return Err(format_unexpected_status(
                 StatusCode::from_u16(200).unwrap(),
                 resp.status(),
+                &url,
                 resp.text().unwrap_or(String::from("<Failed to get body>")),
             ));
         }
@@ -113,18 +114,17 @@ impl Subscription {
     }
 
     pub fn unsubscribe_thread(&self, client: &Client) -> Fallible<()> {
-        let mut resp = client
-            .put(&format!(
-                "https://api.github.com/notifications/threads/{}/subscription",
-                self.thread_id
-            ))
-            .json(&json!({"ignored": true}))
-            .send()?;
+        let url = format!(
+            "https://api.github.com/notifications/threads/{}/subscription",
+            self.thread_id
+        );
+        let mut resp = client.put(&url).json(&json!({"ignored": true})).send()?;
 
         if resp.status() != 200 {
             return Err(format_unexpected_status(
                 StatusCode::from_u16(200).unwrap(),
                 resp.status(),
+                &url,
                 resp.text().unwrap_or(String::from("<Failed to get body>")),
             ));
         }
@@ -133,17 +133,17 @@ impl Subscription {
     }
 
     pub fn mark_a_thread_as_read(&self, client: &Client) -> Fallible<()> {
-        let mut resp = client
-            .patch(&format!(
-                "https://api.github.com/notifications/threads/{}",
-                self.thread_id
-            ))
-            .send()?;
+        let url = format!(
+            "https://api.github.com/notifications/threads/{}",
+            self.thread_id
+        );
+        let mut resp = client.patch(&url).send()?;
 
         if resp.status() != 205 {
             return Err(format_unexpected_status(
                 StatusCode::from_u16(205).unwrap(),
                 resp.status(),
+                &url,
                 resp.text().unwrap_or(String::from("<Failed to get body>")),
             ));
         }
@@ -177,11 +177,13 @@ impl Subscription {
     }
 
     fn fetch_subject_detail(&self, c: &Client) -> Fallible<()> {
-        let mut resp = c.get(&self.subject.url).send()?;
+        let url = &self.subject.url;
+        let mut resp = c.get(url).send()?;
         if resp.status() != 200 {
             return Err(format_unexpected_status(
                 StatusCode::from_u16(200).unwrap(),
                 resp.status(),
+                url,
                 resp.text().unwrap_or(String::from("<Failed to get body>")),
             ));
         }

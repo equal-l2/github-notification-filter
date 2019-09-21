@@ -77,8 +77,14 @@ pub fn filter_by_subject_state(
     ss.into_par_iter()
         .map(|s| -> _ {
             Ok(match s.get_subject_state(c)? {
-                Some(i) => if i == state { Some(s) } else {None}
-                _ => None
+                Some(i) => {
+                    if i == state {
+                        Some(s)
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
             })
         })
         .filter_map(Fallible::transpose)
@@ -118,13 +124,19 @@ pub fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) 
     Ok(())
 }
 
-pub fn fetch_filtered(re: &Regex, c: &Client) -> Fallible<Vec<Subscription>> {
+pub fn fetch_filtered(re: &Regex, n: Option<usize>, c: &Client) -> Fallible<Vec<Subscription>> {
     println!("Fetching notifications...");
     let ss = Subscription::fetch_unread(&c)?;
     println!("Fetched {} notifications", ss.len());
     println!("Filtering notifications by regex...");
-    Ok(ss
+    let it = ss
         .into_par_iter()
         .filter(|s| re.is_match(&s.subject.title))
-        .collect())
+        .collect::<Vec<_>>()
+        .into_iter();
+    if let Some(i) = n {
+        Ok(it.take(i).collect())
+    } else {
+        Ok(it.collect())
+    }
 }

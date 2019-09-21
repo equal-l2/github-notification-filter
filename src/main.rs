@@ -11,10 +11,16 @@ use rayon::prelude::*;
 use regex::Regex;
 
 fn sc_open(m: &ArgMatches<'_>) -> Fallible<()> {
+    let n = m.value_of("count").and_then(|v| {
+        Some(v.parse().unwrap_or_else(|_| {
+            eprintln!("Invalid argument for <count>, expected integer");
+            std::process::exit(1)
+        }))
+    });
     let c = util::create_client()?;
     let ss: Vec<Subscription> = {
         if let Some(i) = m.value_of("filter") {
-            util::fetch_filtered(&Regex::new(i)?, &c)
+            util::fetch_filtered(&Regex::new(i)?, n, &c)
         } else if let Some(i) = m.values_of("thread_ids") {
             let mut ids = vec![];
             for v in i {
@@ -46,7 +52,7 @@ fn sc_list(m: &ArgMatches<'_>) -> Fallible<()> {
     let c = util::create_client()?;
     let ss: Vec<_> = {
         Ok(if let Some(i) = m.value_of("filter") {
-            util::fetch_filtered(&Regex::new(i)?, &c)?
+            util::fetch_filtered(&Regex::new(i)?, None, &c)?
         } else {
             Subscription::fetch_unread(&c)?
         })
@@ -59,6 +65,12 @@ fn sc_list(m: &ArgMatches<'_>) -> Fallible<()> {
 }
 
 fn sc_remove(m: &ArgMatches<'_>) -> Fallible<()> {
+    let n = m.value_of("count").and_then(|v| {
+        Some(v.parse().unwrap_or_else(|_| {
+            eprintln!("Invalid argument for <count>, expected integer");
+            std::process::exit(1)
+        }))
+    });
     let confirm = m.is_present("confirm");
     let c = util::create_client()?;
     let re = {
@@ -69,7 +81,7 @@ fn sc_remove(m: &ArgMatches<'_>) -> Fallible<()> {
         }
     }?;
 
-    let ss = util::fetch_filtered(&re, &c)?;
+    let ss = util::fetch_filtered(&re, n, &c)?;
     println!("{} notifications left", ss.len());
 
     util::filter_and_unsubscribe(ss, confirm, &c)
@@ -81,11 +93,10 @@ fn sc_request(m: &ArgMatches<'_>) -> Fallible<()> {
     let mut resp = c.get(url).send()?;
     if resp.status() != 200 {
         println!("Failed to GET, status code: {}", resp.status());
-        if let Ok(i) = resp.text() {
-            println!("{}", i);
-        }
-    } else {
-        println!("{}", resp.text().unwrap());
+    }
+    println!("Headers:\n{:?}", resp.headers());
+    if let Ok(i) = resp.text() {
+        println!("Body: {}", i);
     }
     Ok(())
 }
@@ -96,14 +107,38 @@ fn main() {
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .subcommand(
             SubCommand::with_name("remove")
-                .visible_alias("rm")
                 .about("Unsubscribe notifications by regex")
                 .args(&[
                     Arg::with_name("confirm")
                         .help("Pause before unsubscription")
                         .long("confirm")
                         .short("c"),
+                    Arg::with_name("count")
+                        .help("only process specified count (by descending order of date)")
+                        .short("n")
+                        .takes_value(true),
                     Arg::with_name("filter")
+                        .help("regex to filter")
+                        .long("filter")
+                        .short("f")
+                        .takes_value(true),
+                ])
+                .visible_alias("rm"),
+        )
+        .subcommand(
+            SubCommand::with_name("open")
+                .about("Open a thread, or all filtered thread with the web browser")
+                .args(&[
+                    Arg::with_name("count")
+                        .help("only process specified count (by descending order of date)")
+                        .short("n")
+                        .takes_value(true),
+                    Arg::with_name("thread_ids")
+                        .conflicts_with("filter")
+                        .min_values(1)
+                        .required(true),
+                    Arg::with_name("filter")
+                        .conflicts_with("thread_ids")
                         .help("regex to filter")
                         .long("filter")
                         .short("f")
@@ -111,24 +146,7 @@ fn main() {
                 ]),
         )
         .subcommand(
-            SubCommand::with_name("open")
-                .about("Open a thread, or all filtered thread with the web browser")
-                .args(&[
-                    Arg::with_name("thread_ids")
-                        .min_values(1)
-                        .required(true)
-                        .conflicts_with("filter"),
-                    Arg::with_name("filter")
-                        .help("regex to filter")
-                        .long("filter")
-                        .short("f")
-                        .takes_value(true)
-                        .conflicts_with("thread_ids"),
-                ]),
-        )
-        .subcommand(
             SubCommand::with_name("list")
-                .visible_alias("ls")
                 .about("List unread subscriptions")
                 .arg(
                     Arg::with_name("filter")
@@ -136,13 +154,14 @@ fn main() {
                         .long("filter")
                         .short("f")
                         .takes_value(true),
-                ),
+                )
+                .visible_alias("ls"),
         )
         .subcommand(
             SubCommand::with_name("request")
-                .visible_alias("req")
                 .about("Make a GET request to URL using ~/.ghnf/token (for devs)")
-                .arg(Arg::with_name("URL").index(1).required(true)),
+                .arg(Arg::with_name("URL").index(1).required(true))
+                .visible_alias("req"),
         )
         .get_matches();
 
