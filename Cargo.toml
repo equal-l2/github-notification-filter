@@ -13,9 +13,13 @@ failure = "0.1"
 open = "1"
 rayon = "1"
 regex = "1"
-reqwest = "0.9"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+[dependencies.reqwest]
+version = "0.9"
+default-features = false
+features = ["rustls-tls", "trust-dns"]
 
 [build-dependencies]
 chrono = "0.4"

@@ -91,10 +91,11 @@ impl Subscription {
             ));
         }
 
-        let mut ss: Vec<_> = {
-            let ns: Vec<Notification> = resp.json()?;
-            ns.into_iter().map(Into::into).collect()
-        };
+        let mut ss = resp
+            .json::<Vec<Notification>>()?
+            .into_iter()
+            .map(Into::into)
+            .collect::<Vec<_>>();
 
         for i in 2.. {
             let mut resp = client
