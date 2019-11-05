@@ -1,8 +1,10 @@
-use crate::subscription::{SubjectState, Subscription, ThreadID};
 use failure::{err_msg, Fallible};
 use rayon::prelude::*;
 use regex::Regex;
 use reqwest::Client;
+
+use crate::subscription::{SubjectState, Subscription, ThreadID};
+use crate::SubjectType;
 
 pub fn read_config(filename: &str) -> Fallible<String> {
     let path = dirs::home_dir()
@@ -124,16 +126,28 @@ pub fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) 
     Ok(())
 }
 
-pub fn fetch_filtered(re: &Regex, n: Option<usize>, c: &Client) -> Fallible<Vec<Subscription>> {
+pub fn fetch_filtered(
+    re: &Regex,
+    n: Option<usize>,
+    k: Option<SubjectType>,
+    c: &Client,
+) -> Fallible<Vec<Subscription>> {
     println!("Fetching notifications...");
     let ss = Subscription::fetch_unread(&c)?;
     println!("Fetched {} notifications", ss.len());
     println!("Filtering notifications by regex...");
-    let it = ss
-        .into_par_iter()
-        .filter(|s| re.is_match(&s.subject.title))
-        .collect::<Vec<_>>()
-        .into_iter();
+    let it = if let Some(i) = k {
+        ss.into_par_iter()
+            .filter(|s| s.subject.r#type == i)
+            .filter(|s| re.is_match(&s.subject.title))
+            .collect::<Vec<_>>()
+            .into_iter()
+    } else {
+        ss.into_par_iter()
+            .filter(|s| re.is_match(&s.subject.title))
+            .collect::<Vec<_>>()
+            .into_iter()
+    };
     if let Some(i) = n {
         Ok(it.take(i).collect())
     } else {

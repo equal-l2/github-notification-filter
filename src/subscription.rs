@@ -3,7 +3,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::json;
 use std::sync::RwLock;
 
-mod gh_objects;
+pub mod gh_objects;
 use gh_objects::Notification;
 pub use gh_objects::SubjectState;
 

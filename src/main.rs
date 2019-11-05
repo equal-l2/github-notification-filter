@@ -1,16 +1,27 @@
 #![warn(rust_2018_idioms)]
 #![warn(rust_2018_compatibility)]
 #![warn(future_incompatible)]
-mod subscription;
-mod util;
-
-use crate::subscription::Subscription;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
 use failure::{err_msg, format_err, Error, Fallible};
 use rayon::prelude::*;
 use regex::Regex;
 
+mod subscription;
+mod util;
+
+use crate::subscription::gh_objects::SubjectType;
+use crate::subscription::Subscription;
+
 fn sc_open(m: &ArgMatches<'_>) -> Fallible<()> {
+    let k = m.value_of("kind").and_then(|v| match v {
+        "commit" => Some(SubjectType::Commit),
+        "issue" => Some(SubjectType::Issue),
+        "pr" => Some(SubjectType::PullRequest),
+        _ => {
+            eprintln!("Invalid argument for <kind>, expected \"commit\", \"issue\", or \"pr\"");
+            std::process::exit(1)
+        }
+    });
     let n = m.value_of("count").and_then(|v| {
         Some(v.parse().unwrap_or_else(|_| {
             eprintln!("Invalid argument for <count>, expected integer");
@@ -20,7 +31,12 @@ fn sc_open(m: &ArgMatches<'_>) -> Fallible<()> {
     let c = util::create_client()?;
     let ss: Vec<Subscription> = {
         if let Some(i) = m.value_of("filter") {
-            util::fetch_filtered(&Regex::new(i)?, n, &c)
+            util::fetch_filtered(&Regex::new(i)?, n, k, &c)
+        } else if let Some(i) = k {
+            Ok(Subscription::fetch_unread(&c)?
+                .into_par_iter()
+                .filter(|v| v.subject.r#type == i)
+                .collect())
         } else if let Some(i) = m.values_of("thread_ids") {
             let mut ids = vec![];
             for v in i {
@@ -52,7 +68,7 @@ fn sc_list(m: &ArgMatches<'_>) -> Fallible<()> {
     let c = util::create_client()?;
     let ss: Vec<_> = {
         Ok(if let Some(i) = m.value_of("filter") {
-            util::fetch_filtered(&Regex::new(i)?, None, &c)?
+            util::fetch_filtered(&Regex::new(i)?, None, None, &c)?
         } else {
             Subscription::fetch_unread(&c)?
         })
@@ -65,6 +81,15 @@ fn sc_list(m: &ArgMatches<'_>) -> Fallible<()> {
 }
 
 fn sc_remove(m: &ArgMatches<'_>) -> Fallible<()> {
+    let k = m.value_of("kind").and_then(|v| match v {
+        "commit" => Some(SubjectType::Commit),
+        "issue" => Some(SubjectType::Issue),
+        "pr" => Some(SubjectType::PullRequest),
+        _ => {
+            eprintln!("Invalid argument for <kind>, expected \"commit\", \"issue\", or \"pr\"");
+            std::process::exit(1)
+        }
+    });
     let n = m.value_of("count").and_then(|v| {
         Some(v.parse().unwrap_or_else(|_| {
             eprintln!("Invalid argument for <count>, expected integer");
@@ -81,7 +106,7 @@ fn sc_remove(m: &ArgMatches<'_>) -> Fallible<()> {
         }
     }?;
 
-    let ss = util::fetch_filtered(&re, n, &c)?;
+    let ss = util::fetch_filtered(&re, n, k, &c)?;
     println!("{} notifications left", ss.len());
 
     util::filter_and_unsubscribe(ss, confirm, &c)
@@ -114,13 +139,17 @@ fn main() {
                         .long("confirm")
                         .short("c"),
                     Arg::with_name("count")
-                        .help("only process specified count (by descending order of date)")
+                        .help("only process specified count (the order is undetermined)")
                         .short("n")
                         .takes_value(true),
                     Arg::with_name("filter")
                         .help("regex to filter")
                         .long("filter")
                         .short("f")
+                        .takes_value(true),
+                    Arg::with_name("kind")
+                        .help("specify a kind of notification (\"commit\", \"issue\", or \"pr\"")
+                        .short("k")
                         .takes_value(true),
                 ])
                 .visible_alias("rm"),
@@ -130,11 +159,12 @@ fn main() {
                 .about("Open a thread, or all filtered thread with the web browser")
                 .args(&[
                     Arg::with_name("count")
-                        .help("only process specified count (by descending order of date)")
+                        .help("only process specified count (the order is undetermined)")
                         .short("n")
                         .takes_value(true),
                     Arg::with_name("thread_ids")
                         .conflicts_with("filter")
+                        .conflicts_with("kind")
                         .min_values(1)
                         .required(true),
                     Arg::with_name("filter")
@@ -142,6 +172,11 @@ fn main() {
                         .help("regex to filter")
                         .long("filter")
                         .short("f")
+                        .takes_value(true),
+                    Arg::with_name("kind")
+                        .conflicts_with("thread_ids")
+                        .help("specify a kind of notification (\"commit\", \"issue\", or \"pr\"")
+                        .short("k")
                         .takes_value(true),
                 ]),
         )
