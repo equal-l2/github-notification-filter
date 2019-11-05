@@ -97,6 +97,7 @@ pub fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) 
     println!("Filtering out open notifications...");
     let candidates: Vec<Subscription> =
         filter_by_subject_state(filter_ignored(ss).unwrap(), SubjectState::Closed, c)?;
+    println!("{} notification(s) left", candidates.len());
 
     if !candidates.is_empty() {
         if confirm {
