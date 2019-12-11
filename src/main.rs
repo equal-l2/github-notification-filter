@@ -56,6 +56,7 @@ fn sc_open(m: &ArgMatches<'_>) -> Fallible<()> {
             unreachable!();
         }
     }?;
+    println!("Finished filtering, now open {} page(s)...", ss.len());
     ss.into_par_iter()
         .map(|s| -> _ {
             println!("Open {}", s);
