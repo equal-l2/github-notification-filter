@@ -14,6 +14,8 @@ pub struct Subscription {
     pub subject: gh_objects::Subject,
     pub thread_id: ThreadID,
     pub repo_name: String,
+    //TODO: replace RwLock with Lazy?
+    // (must assure this is written only once)
     subject_detail: RwLock<Option<gh_objects::SubjectDetail>>,
 }
 
@@ -72,7 +74,7 @@ impl Subscription {
             .map(Into::into)
     }
 
-    pub fn open_thread(&self, c: &Client) -> Fallible<()> {
+    pub fn open(&self, c: &Client) -> Fallible<()> {
         open::that(self.get_html_url(&c)?)
             .map(|_| ()) // discard ExitStatus
             .map_err(Into::into)
@@ -114,7 +116,7 @@ impl Subscription {
         unreachable!();
     }
 
-    pub fn unsubscribe_thread(&self, client: &Client) -> Fallible<()> {
+    pub fn unsubscribe(&self, client: &Client) -> Fallible<()> {
         let url = format!(
             "https://api.github.com/notifications/threads/{}/subscription",
             self.thread_id
@@ -133,7 +135,7 @@ impl Subscription {
         Ok(())
     }
 
-    pub fn mark_a_thread_as_read(&self, client: &Client) -> Fallible<()> {
+    pub fn mark_as_read(&self, client: &Client) -> Fallible<()> {
         let url = format!(
             "https://api.github.com/notifications/threads/{}",
             self.thread_id
@@ -152,6 +154,7 @@ impl Subscription {
         Ok(())
     }
 
+    /// get url for subject's html location
     pub fn get_html_url(&self, c: &Client) -> Fallible<String> {
         // self.subject_detail.read() cannot be in a variable
         // because it prevents anyone from writing to subject_detail while it lives
@@ -168,6 +171,7 @@ impl Subscription {
             .to_owned())
     }
 
+    /// get subject state (i.e. open or closed)
     pub fn get_subject_state(&self, c: &Client) -> Fallible<Option<gh_objects::SubjectState>> {
         // self.subject_detail.read() cannot be in a variable
         // because it prevents anyone from writing to subject_detail while it lives

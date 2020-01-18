@@ -60,7 +60,7 @@ fn sc_open(m: &ArgMatches<'_>) -> Fallible<()> {
     ss.into_par_iter()
         .map(|s| -> _ {
             println!("Open {}", s);
-            s.open_thread(&c)
+            s.open(&c)
         })
         .collect()
 }

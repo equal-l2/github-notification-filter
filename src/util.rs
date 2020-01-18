@@ -114,8 +114,8 @@ pub fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) 
         candidates
             .into_par_iter()
             .map(|s| -> _ {
-                s.unsubscribe_thread(&c)?;
-                s.mark_a_thread_as_read(&c)?;
+                s.unsubscribe(&c)?;
+                s.mark_as_read(&c)?;
                 println!("Unsubscribed {}", s);
                 Ok(())
             })
