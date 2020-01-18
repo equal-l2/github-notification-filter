@@ -22,11 +22,11 @@ fn sc_open(m: &ArgMatches<'_>) -> Fallible<()> {
             std::process::exit(1)
         }
     });
-    let n = m.value_of("count").and_then(|v| {
-        Some(v.parse().unwrap_or_else(|_| {
+    let n = m.value_of("count").map(|v| {
+        v.parse().unwrap_or_else(|_| {
             eprintln!("Invalid argument for <count>, expected integer");
             std::process::exit(1)
-        }))
+        })
     });
     let c = util::create_client()?;
     let ss: Vec<Subscription> = {
@@ -91,11 +91,11 @@ fn sc_remove(m: &ArgMatches<'_>) -> Fallible<()> {
             std::process::exit(1)
         }
     });
-    let n = m.value_of("count").and_then(|v| {
-        Some(v.parse().unwrap_or_else(|_| {
+    let n = m.value_of("count").map(|v| {
+        v.parse().unwrap_or_else(|_| {
             eprintln!("Invalid argument for <count>, expected integer");
             std::process::exit(1)
-        }))
+        })
     });
     let confirm = m.is_present("confirm");
     let c = util::create_client()?;

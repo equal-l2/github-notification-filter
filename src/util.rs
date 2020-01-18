@@ -30,7 +30,7 @@ pub fn create_client() -> Fallible<Client> {
     let token = read_config("token")
         .expect("Failed to read GitHub token from ~/.ghnf/token")
         .split('\n')
-        .nth(0)
+        .next()
         .ok_or(err_msg("Malformed GitHub Personal Access Token"))?
         .to_owned();
     let mut headers = reqwest::header::HeaderMap::new();
