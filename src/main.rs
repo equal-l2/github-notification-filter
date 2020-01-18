@@ -120,9 +120,9 @@ fn sc_request(m: &ArgMatches<'_>) -> Fallible<()> {
     if resp.status() != 200 {
         println!("Failed to GET, status code: {}", resp.status());
     }
-    println!("Headers:\n{:?}", resp.headers());
+    eprintln!("Headers:\n{:?}", resp.headers());
     if let Ok(i) = resp.text() {
-        println!("Body: {}", i);
+        println!("{}", i);
     }
     Ok(())
 }
