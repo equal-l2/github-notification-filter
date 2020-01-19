@@ -1,7 +1,7 @@
 use failure::{err_msg, format_err, Fallible};
 use reqwest::{Client, StatusCode};
 use serde_json::json;
-use std::sync::RwLock;
+use once_cell::unsync::OnceCell;
 
 pub mod gh_objects;
 use gh_objects::Notification;
@@ -14,9 +14,7 @@ pub struct Subscription {
     pub subject: gh_objects::Subject,
     pub thread_id: ThreadID,
     pub repo_name: String,
-    //TODO: replace RwLock with Lazy?
-    // (must assure this is written only once)
-    subject_detail: RwLock<Option<gh_objects::SubjectDetail>>,
+    subject_detail: OnceCell<gh_objects::SubjectDetail>,
 }
 
 impl From<Notification> for Subscription {
@@ -25,7 +23,7 @@ impl From<Notification> for Subscription {
             subject: n.subject,
             thread_id: n.url.split('/').last().unwrap().parse().unwrap(),
             repo_name: n.repository.full_name,
-            subject_detail: RwLock::new(None),
+            subject_detail: OnceCell::new(),
         }
     }
 }
@@ -156,16 +154,12 @@ impl Subscription {
 
     /// get url for subject's html location
     pub fn get_html_url(&self, c: &Client) -> Fallible<String> {
-        // self.subject_detail.read() cannot be in a variable
-        // because it prevents anyone from writing to subject_detail while it lives
-        if self.subject_detail.read().unwrap().is_none() {
+        if self.subject_detail.get().is_none() {
             self.fetch_subject_detail(c)?;
         }
         Ok(self
             .subject_detail
-            .read()
-            .unwrap()
-            .as_ref()
+            .get()
             .unwrap()
             .html_url
             .to_owned())
@@ -173,12 +167,10 @@ impl Subscription {
 
     /// get subject state (i.e. open or closed)
     pub fn get_subject_state(&self, c: &Client) -> Fallible<Option<gh_objects::SubjectState>> {
-        // self.subject_detail.read() cannot be in a variable
-        // because it prevents anyone from writing to subject_detail while it lives
-        if self.subject_detail.read().unwrap().is_none() {
+        if self.subject_detail.get().is_none() {
             self.fetch_subject_detail(c)?;
         }
-        Ok(self.subject_detail.read().unwrap().as_ref().unwrap().state)
+        Ok(self.subject_detail.get().unwrap().state)
     }
 
     fn fetch_subject_detail(&self, c: &Client) -> Fallible<()> {
@@ -193,7 +185,7 @@ impl Subscription {
             ));
         }
         let result: gh_objects::SubjectDetail = resp.json()?;
-        *self.subject_detail.write().unwrap() = Some(result);
+        self.subject_detail.set(result).expect("subject_detail is re-initialized");
         Ok(())
     }
 }
