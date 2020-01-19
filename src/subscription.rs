@@ -54,7 +54,7 @@ fn format_unexpected_status(
 }
 
 impl Subscription {
-    pub fn from_thread_id(id: ThreadID, c: &Client) -> Fallible<Subscription> {
+    pub fn from_thread_id(id: ThreadID, c: &Client) -> Fallible<Self> {
         let url = format!("https://api.github.com/notifications/threads/{}", id);
         let mut resp = c.get(&url).send()?;
 
@@ -73,12 +73,12 @@ impl Subscription {
     }
 
     pub fn open(&self, c: &Client) -> Fallible<()> {
-        open::that(self.get_html_url(&c)?)
+        open::that(self.get_html_url(c)?)
             .map(|_| ()) // discard ExitStatus
             .map_err(Into::into)
     }
 
-    pub fn fetch_unread(client: &Client) -> Fallible<Vec<Subscription>> {
+    pub fn fetch_unread(client: &Client) -> Fallible<Vec<Self>> {
         let url = "https://api.github.com/notifications";
         let mut resp = client.get(url).send()?;
 
@@ -86,7 +86,7 @@ impl Subscription {
             return Err(format_unexpected_status(
                 StatusCode::from_u16(200).unwrap(),
                 resp.status(),
-                &url,
+                url,
                 resp.text().unwrap_or(String::from("<Failed to get body>")),
             ));
         }

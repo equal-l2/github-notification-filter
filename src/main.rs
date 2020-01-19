@@ -1,6 +1,12 @@
 #![warn(rust_2018_idioms)]
 #![warn(rust_2018_compatibility)]
 #![warn(future_incompatible)]
+#![warn(clippy::nursery)]
+#![warn(clippy::pedantic)]
+#![allow(clippy::fallible_impl_from)]
+#![allow(clippy::filter_map)]
+#![allow(clippy::or_fun_call)]
+
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
 use failure::{err_msg, format_err, Error, Fallible};
 use rayon::prelude::*;
@@ -101,7 +107,7 @@ fn sc_remove(m: &ArgMatches<'_>) -> Fallible<()> {
     let c = util::create_client()?;
     let re = {
         if let Some(i) = m.value_of("filter") {
-            Regex::new(&i).map_err(Into::into)
+            Regex::new(i).map_err(Into::into)
         } else {
             util::compile_regex()
         }

@@ -34,9 +34,9 @@ pub enum SubjectType {
 impl std::fmt::Display for SubjectType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SubjectType::Issue => write!(f, "Issue"),
-            SubjectType::PullRequest => write!(f, "Pull Request"),
-            SubjectType::Commit => write!(f, "Commit"),
+            Self::Issue => write!(f, "Issue"),
+            Self::PullRequest => write!(f, "Pull Request"),
+            Self::Commit => write!(f, "Commit"),
         }
     }
 }

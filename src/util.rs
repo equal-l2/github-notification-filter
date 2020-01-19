@@ -99,9 +99,11 @@ pub fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) 
         filter_by_subject_state(filter_ignored(ss).unwrap(), SubjectState::Closed, c)?;
     println!("{} notification(s) left", candidates.len());
 
-    if !candidates.is_empty() {
+    if candidates.is_empty() {
+        println!("No notification matched");
+    } else {
         if confirm {
-            for s in candidates.iter() {
+            for s in &candidates {
                 println!("{}", s);
             }
 
@@ -114,14 +116,12 @@ pub fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) 
         candidates
             .into_par_iter()
             .map(|s| -> _ {
-                s.unsubscribe(&c)?;
-                s.mark_as_read(&c)?;
+                s.unsubscribe(c)?;
+                s.mark_as_read(c)?;
                 println!("Unsubscribed {}", s);
                 Ok(())
             })
             .collect::<Fallible<_>>()?;
-    } else {
-        println!("No notification matched");
     }
 
     Ok(())
@@ -134,7 +134,7 @@ pub fn fetch_filtered(
     c: &Client,
 ) -> Fallible<Vec<Subscription>> {
     println!("Fetching notifications...");
-    let ss = Subscription::fetch_unread(&c)?;
+    let ss = Subscription::fetch_unread(c)?;
     println!("Fetched {} notifications", ss.len());
     println!("Filtering notifications by regex...");
     let it = if let Some(i) = k {
