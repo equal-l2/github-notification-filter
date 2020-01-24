@@ -1,6 +1,6 @@
 use failure::{err_msg, Fallible};
 use rayon::prelude::*;
-use regex::Regex;
+use regex::RegexSet;
 use reqwest::blocking::Client;
 
 use crate::subscription::{SubjectState, Subscription, ThreadID};
@@ -14,16 +14,20 @@ pub fn read_config(filename: &str) -> Fallible<String> {
     std::fs::read_to_string(path).map_err(Into::into)
 }
 
-pub fn compile_regex() -> Fallible<Regex> {
-    let filters: Vec<_> = read_config("filters")
-        .expect("Failed to read filters from ~/.ghnf/filters")
-        .split('\n')
-        .filter(|s| !s.is_empty())
-        .map(String::from)
-        .collect();
-
-    let filters_string = String::from(r"(?i)") + &filters.join("|");
-    Regex::new(&filters_string).map_err(Into::into)
+pub fn compile_regex() -> Fallible<RegexSet> {
+    RegexSet::new(
+        read_config("filters")
+            .expect("Failed to read filters from ~/.ghnf/filters")
+            .split('\n')
+            .filter_map(|s| {
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(String::from("(?i)") + s)
+                }
+            }),
+    )
+    .map_err(Into::into)
 }
 
 pub fn create_client() -> Fallible<Client> {
@@ -129,7 +133,7 @@ pub fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) 
 }
 
 pub fn fetch_filtered(
-    re: &Regex,
+    re: &RegexSet,
     n: Option<usize>,
     k: Option<SubjectType>,
     c: &Client,

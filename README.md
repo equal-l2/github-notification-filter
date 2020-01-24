@@ -16,7 +16,7 @@ Suppose you want to unsubscribe all notifications start with `bad` or `poor`, th
 ^bad
 ^poor
 ```
-(all lines (except empty ones) are joined into a form of `<line-1>|<line-2>|...|<line-n>` and then compiled into a regex)
+(all lines are considered as case-insensitive regex)
 
 ### `token`
 [Create a personal access token](https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line), then copy and paste the token to `~/.ghnf/token`

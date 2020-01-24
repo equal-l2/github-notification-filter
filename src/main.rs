@@ -10,7 +10,7 @@
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
 use failure::{err_msg, format_err, Error, Fallible};
 use rayon::prelude::*;
-use regex::Regex;
+use regex::RegexSet;
 
 mod subscription;
 mod util;
@@ -37,7 +37,7 @@ fn sc_open(m: &ArgMatches<'_>) -> Fallible<()> {
     let c = util::create_client()?;
     let ss: Vec<Subscription> = {
         if let Some(i) = m.value_of("filter") {
-            util::fetch_filtered(&Regex::new(i)?, n, k, &c)
+            util::fetch_filtered(&RegexSet::new(&[i])?, n, k, &c)
         } else if let Some(i) = k {
             Ok(Subscription::fetch_unread(&c)?
                 .into_par_iter()
@@ -75,7 +75,7 @@ fn sc_list(m: &ArgMatches<'_>) -> Fallible<()> {
     let c = util::create_client()?;
     let ss: Vec<_> = {
         Ok(if let Some(i) = m.value_of("filter") {
-            util::fetch_filtered(&Regex::new(i)?, None, None, &c)?
+            util::fetch_filtered(&RegexSet::new(&[i])?, None, None, &c)?
         } else {
             Subscription::fetch_unread(&c)?
         })
@@ -107,7 +107,7 @@ fn sc_remove(m: &ArgMatches<'_>) -> Fallible<()> {
     let c = util::create_client()?;
     let re = {
         if let Some(i) = m.value_of("filter") {
-            Regex::new(i).map_err(Into::into)
+            RegexSet::new(&[i]).map_err(Into::into)
         } else {
             util::compile_regex()
         }
