@@ -122,7 +122,7 @@ fn sc_remove(m: &ArgMatches<'_>) -> Fallible<()> {
 fn sc_request(m: &ArgMatches<'_>) -> Fallible<()> {
     let url = m.value_of("URL").unwrap();
     let c = util::create_client()?;
-    let mut resp = c.get(url).send()?;
+    let resp = c.get(url).send()?;
     if resp.status() != 200 {
         println!("Failed to GET, status code: {}", resp.status());
     }

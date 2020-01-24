@@ -1,7 +1,8 @@
 use failure::{err_msg, format_err, Fallible};
-use reqwest::{Client, StatusCode};
-use serde_json::json;
 use once_cell::unsync::OnceCell;
+use reqwest::StatusCode;
+use reqwest::blocking::Client;
+use serde_json::json;
 
 pub mod gh_objects;
 use gh_objects::Notification;
@@ -56,7 +57,7 @@ fn format_unexpected_status(
 impl Subscription {
     pub fn from_thread_id(id: ThreadID, c: &Client) -> Fallible<Self> {
         let url = format!("https://api.github.com/notifications/threads/{}", id);
-        let mut resp = c.get(&url).send()?;
+        let resp = c.get(&url).send()?;
 
         if resp.status() != 200 {
             return Err(format_unexpected_status(
@@ -80,7 +81,7 @@ impl Subscription {
 
     pub fn fetch_unread(client: &Client) -> Fallible<Vec<Self>> {
         let url = "https://api.github.com/notifications";
-        let mut resp = client.get(url).send()?;
+        let resp = client.get(url).send()?;
 
         if resp.status() != 200 {
             return Err(format_unexpected_status(
@@ -98,7 +99,7 @@ impl Subscription {
             .collect::<Vec<_>>();
 
         for i in 2.. {
-            let mut resp = client
+            let resp = client
                 .get("https://api.github.com/notifications")
                 .query(&[("page", &i.to_string())])
                 .send()?;
@@ -119,7 +120,7 @@ impl Subscription {
             "https://api.github.com/notifications/threads/{}/subscription",
             self.thread_id
         );
-        let mut resp = client.put(&url).json(&json!({"ignored": true})).send()?;
+        let resp = client.put(&url).json(&json!({"ignored": true})).send()?;
 
         if resp.status() != 200 {
             return Err(format_unexpected_status(
@@ -138,7 +139,7 @@ impl Subscription {
             "https://api.github.com/notifications/threads/{}",
             self.thread_id
         );
-        let mut resp = client.patch(&url).send()?;
+        let resp = client.patch(&url).send()?;
 
         if resp.status() != 205 {
             return Err(format_unexpected_status(
@@ -175,7 +176,7 @@ impl Subscription {
 
     fn fetch_subject_detail(&self, c: &Client) -> Fallible<()> {
         let url = &self.subject.url;
-        let mut resp = c.get(url).send()?;
+        let resp = c.get(url).send()?;
         if resp.status() != 200 {
             return Err(format_unexpected_status(
                 StatusCode::from_u16(200).unwrap(),

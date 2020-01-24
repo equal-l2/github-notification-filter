@@ -1,7 +1,7 @@
 use failure::{err_msg, Fallible};
 use rayon::prelude::*;
 use regex::Regex;
-use reqwest::Client;
+use reqwest::blocking::Client;
 
 use crate::subscription::{SubjectState, Subscription, ThreadID};
 use crate::SubjectType;
@@ -38,7 +38,8 @@ pub fn create_client() -> Fallible<Client> {
         reqwest::header::AUTHORIZATION,
         reqwest::header::HeaderValue::from_str(&format!("token {}", token))?,
     );
-    reqwest::Client::builder()
+    Client::builder()
+        .user_agent("GitHub Notification Filter (by equal-l2)")
         .default_headers(headers)
         .build()
         .map_err(Into::into)
