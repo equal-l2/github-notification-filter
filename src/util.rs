@@ -84,13 +84,7 @@ pub fn filter_by_subject_state(
     ss.into_par_iter()
         .map(|s| -> _ {
             Ok(match s.get_subject_state(c)? {
-                Some(i) => {
-                    if i == state {
-                        Some(s)
-                    } else {
-                        None
-                    }
-                }
+                Some(i) if i == state => Some(s),
                 _ => None,
             })
         })

@@ -2,7 +2,6 @@ use failure::{err_msg, format_err, Fallible};
 use once_cell::unsync::OnceCell;
 use reqwest::StatusCode;
 use reqwest::blocking::Client;
-use serde_json::json;
 
 pub mod gh_objects;
 use gh_objects::Notification;
@@ -120,11 +119,11 @@ impl Subscription {
             "https://api.github.com/notifications/threads/{}/subscription",
             self.thread_id
         );
-        let resp = client.put(&url).json(&json!({"ignored": true})).send()?;
+        let resp = client.delete(&url).send()?;
 
-        if resp.status() != 200 {
+        if resp.status() != 204 {
             return Err(format_unexpected_status(
-                StatusCode::from_u16(200).unwrap(),
+                StatusCode::from_u16(204).unwrap(),
                 resp.status(),
                 &url,
                 resp.text().unwrap_or(String::from("<Failed to get body>")),
