@@ -5,7 +5,6 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::fallible_impl_from)]
 #![allow(clippy::filter_map)]
-#![allow(clippy::or_fun_call)]
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
 use failure::{err_msg, format_err, Error, Fallible};

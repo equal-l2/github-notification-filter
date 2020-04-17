@@ -8,7 +8,7 @@ use crate::SubjectType;
 
 pub fn read_config(filename: &str) -> Fallible<String> {
     let path = dirs::home_dir()
-        .ok_or(err_msg("Failed to read ~/"))?
+        .ok_or_else(|| err_msg("Failed to read ~/"))?
         .join(".ghnf")
         .join(filename);
     std::fs::read_to_string(path).map_err(Into::into)
@@ -35,7 +35,7 @@ pub fn create_client() -> Fallible<Client> {
         .expect("Failed to read GitHub token from ~/.ghnf/token")
         .split('\n')
         .next()
-        .ok_or(err_msg("Malformed GitHub Personal Access Token"))?
+        .ok_or_else(|| err_msg("Malformed GitHub Personal Access Token"))?
         .to_owned();
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(

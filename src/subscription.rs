@@ -1,7 +1,7 @@
 use failure::{err_msg, format_err, Fallible};
 use once_cell::unsync::OnceCell;
-use reqwest::StatusCode;
 use reqwest::blocking::Client;
+use reqwest::StatusCode;
 
 pub mod gh_objects;
 use gh_objects::Notification;
@@ -63,7 +63,7 @@ impl Subscription {
                 StatusCode::from_u16(200).unwrap(),
                 resp.status(),
                 &url,
-                resp.text().unwrap_or(String::from("<Failed to get body>")),
+                resp.text().unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
         }
 
@@ -87,7 +87,7 @@ impl Subscription {
                 StatusCode::from_u16(200).unwrap(),
                 resp.status(),
                 url,
-                resp.text().unwrap_or(String::from("<Failed to get body>")),
+                resp.text().unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
         }
 
@@ -126,7 +126,7 @@ impl Subscription {
                 StatusCode::from_u16(204).unwrap(),
                 resp.status(),
                 &url,
-                resp.text().unwrap_or(String::from("<Failed to get body>")),
+                resp.text().unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
         }
 
@@ -145,7 +145,7 @@ impl Subscription {
                 StatusCode::from_u16(205).unwrap(),
                 resp.status(),
                 &url,
-                resp.text().unwrap_or(String::from("<Failed to get body>")),
+                resp.text().unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
         }
 
@@ -157,12 +157,7 @@ impl Subscription {
         if self.subject_detail.get().is_none() {
             self.fetch_subject_detail(c)?;
         }
-        Ok(self
-            .subject_detail
-            .get()
-            .unwrap()
-            .html_url
-            .to_owned())
+        Ok(self.subject_detail.get().unwrap().html_url.to_owned())
     }
 
     /// get subject state (i.e. open or closed)
@@ -181,11 +176,13 @@ impl Subscription {
                 StatusCode::from_u16(200).unwrap(),
                 resp.status(),
                 url,
-                resp.text().unwrap_or(String::from("<Failed to get body>")),
+                resp.text().unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
         }
         let result: gh_objects::SubjectDetail = resp.json()?;
-        self.subject_detail.set(result).expect("subject_detail is re-initialized");
+        self.subject_detail
+            .set(result)
+            .expect("subject_detail is re-initialized");
         Ok(())
     }
 }
