@@ -63,7 +63,8 @@ impl Subscription {
                 StatusCode::from_u16(200).unwrap(),
                 resp.status(),
                 &url,
-                resp.text().unwrap_or_else(|_| String::from("<Failed to get body>")),
+                resp.text()
+                    .unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
         }
 
@@ -87,7 +88,8 @@ impl Subscription {
                 StatusCode::from_u16(200).unwrap(),
                 resp.status(),
                 url,
-                resp.text().unwrap_or_else(|_| String::from("<Failed to get body>")),
+                resp.text()
+                    .unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
         }
 
@@ -126,7 +128,8 @@ impl Subscription {
                 StatusCode::from_u16(204).unwrap(),
                 resp.status(),
                 &url,
-                resp.text().unwrap_or_else(|_| String::from("<Failed to get body>")),
+                resp.text()
+                    .unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
         }
 
@@ -145,7 +148,8 @@ impl Subscription {
                 StatusCode::from_u16(205).unwrap(),
                 resp.status(),
                 &url,
-                resp.text().unwrap_or_else(|_| String::from("<Failed to get body>")),
+                resp.text()
+                    .unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
         }
 
@@ -176,7 +180,8 @@ impl Subscription {
                 StatusCode::from_u16(200).unwrap(),
                 resp.status(),
                 url,
-                resp.text().unwrap_or_else(|_| String::from("<Failed to get body>")),
+                resp.text()
+                    .unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
         }
         let result: gh_objects::SubjectDetail = resp.json()?;

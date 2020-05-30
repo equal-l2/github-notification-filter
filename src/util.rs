@@ -1,5 +1,4 @@
 use failure::{err_msg, Fallible};
-use rayon::prelude::*;
 use regex::RegexSet;
 use reqwest::blocking::Client;
 
@@ -71,7 +70,7 @@ pub fn load_ignored() -> Fallible<Vec<ThreadID>> {
 pub fn filter_ignored(ss: Vec<Subscription>) -> Fallible<Vec<Subscription>> {
     let ignore = load_ignored().expect("Failed to read GitHub token from ~/.ghnf/ignored");
     Ok(ss
-        .into_par_iter()
+        .into_iter()
         .filter(|s| !ignore.contains(&s.thread_id))
         .collect())
 }
@@ -81,7 +80,7 @@ pub fn filter_by_subject_state(
     state: SubjectState,
     c: &Client,
 ) -> Fallible<Vec<Subscription>> {
-    ss.into_par_iter()
+    ss.into_iter()
         .map(|s| -> _ {
             Ok(match s.get_subject_state(c)? {
                 Some(i) if i == state => Some(s),
@@ -113,7 +112,7 @@ pub fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) 
 
         println!("Unsubscribing notifications...");
         candidates
-            .into_par_iter()
+            .into_iter()
             .map(|s| -> _ {
                 s.unsubscribe(c)?;
                 s.mark_as_read(c)?;
@@ -127,30 +126,35 @@ pub fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) 
 }
 
 pub fn fetch_filtered(
-    re: &RegexSet,
+    re: Option<&RegexSet>,
     n: Option<usize>,
     k: Option<SubjectType>,
     c: &Client,
 ) -> Fallible<Vec<Subscription>> {
     println!("Fetching notifications...");
+
     let ss = Subscription::fetch_unread(c)?;
     println!("Fetched {} notifications", ss.len());
+
     println!("Filtering notifications by regex...");
-    let it = if let Some(i) = k {
-        ss.into_par_iter()
-            .filter(|s| s.subject.r#type == i)
-            .filter(|s| re.is_match(&s.subject.title))
-            .collect::<Vec<_>>()
-            .into_iter()
+    let ss = if let Some(r) = re {
+        ss.into_iter()
+            .filter(|s| r.is_match(&s.subject.title))
+            .collect()
     } else {
-        ss.into_par_iter()
-            .filter(|s| re.is_match(&s.subject.title))
-            .collect::<Vec<_>>()
-            .into_iter()
+        ss
     };
-    if let Some(i) = n {
-        Ok(it.take(i).collect())
+
+    // filter by kind
+    let ss = if let Some(i) = k {
+        ss.into_iter().filter(|s| s.subject.r#type == i).collect()
     } else {
-        Ok(it.collect())
+        ss
+    };
+
+    if let Some(i) = n {
+        Ok(ss.into_iter().take(i).collect())
+    } else {
+        Ok(ss)
     }
 }
