@@ -1,6 +1,6 @@
 use failure::{err_msg, Fallible};
 use regex::RegexSet;
-use reqwest::blocking::Client;
+use reqwest::Client;
 
 use crate::subscription::{SubjectState, Subscription, ThreadID};
 use crate::SubjectType;
@@ -75,26 +75,29 @@ pub fn filter_ignored(ss: Vec<Subscription>) -> Fallible<Vec<Subscription>> {
         .collect())
 }
 
-pub fn filter_by_subject_state(
+pub async fn filter_by_subject_state(
     ss: Vec<Subscription>,
     state: SubjectState,
     c: &Client,
 ) -> Fallible<Vec<Subscription>> {
-    ss.into_iter()
-        .map(|s| -> _ {
-            Ok(match s.get_subject_state(c)? {
-                Some(i) if i == state => Some(s),
-                _ => None,
-            })
-        })
-        .filter_map(Fallible::transpose)
-        .collect()
+    let mut v = vec![];
+    for s in ss {
+        match s.get_subject_state(c).await? {
+            Some(i) if i == state => v.push(s),
+            _ => {}
+        }
+    }
+    Ok(v)
 }
 
-pub fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) -> Fallible<()> {
+pub async fn filter_and_unsubscribe(
+    ss: Vec<Subscription>,
+    confirm: bool,
+    c: &Client,
+) -> Fallible<()> {
     println!("Filtering out open notifications...");
     let candidates: Vec<Subscription> =
-        filter_by_subject_state(filter_ignored(ss).unwrap(), SubjectState::Closed, c)?;
+        filter_by_subject_state(filter_ignored(ss).unwrap(), SubjectState::Closed, c).await?;
     println!("{} notification(s) left", candidates.len());
 
     if candidates.is_empty() {
@@ -111,21 +114,17 @@ pub fn filter_and_unsubscribe(ss: Vec<Subscription>, confirm: bool, c: &Client) 
         }
 
         println!("Unsubscribing notifications...");
-        candidates
-            .into_iter()
-            .map(|s| -> _ {
-                s.unsubscribe(c)?;
-                s.mark_as_read(c)?;
-                println!("Unsubscribed {}", s);
-                Ok(())
-            })
-            .collect::<Fallible<_>>()?;
+        for s in candidates {
+            s.unsubscribe(c).await?;
+            s.mark_as_read(c).await?;
+            println!("Unsubscribed {}", s);
+        }
     }
 
     Ok(())
 }
 
-pub fn fetch_filtered(
+pub async fn fetch_filtered(
     re: Option<&RegexSet>,
     n: Option<usize>,
     k: Option<SubjectType>,
@@ -133,7 +132,7 @@ pub fn fetch_filtered(
 ) -> Fallible<Vec<Subscription>> {
     println!("Fetching notifications...");
 
-    let ss = Subscription::fetch_unread(c)?;
+    let ss = Subscription::fetch_unread(c).await?;
     println!("Fetched {} notifications", ss.len());
 
     println!("Filtering notifications by regex...");

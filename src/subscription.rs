@@ -1,6 +1,6 @@
 use failure::{err_msg, format_err, Fallible};
 use once_cell::unsync::OnceCell;
-use reqwest::blocking::Client;
+use reqwest::Client;
 use reqwest::StatusCode;
 
 pub mod gh_objects;
@@ -54,9 +54,9 @@ fn format_unexpected_status(
 }
 
 impl Subscription {
-    pub fn from_thread_id(id: ThreadID, c: &Client) -> Fallible<Self> {
+    pub async fn from_thread_id(id: ThreadID, c: &Client) -> Fallible<Self> {
         let url = format!("https://api.github.com/notifications/threads/{}", id);
-        let resp = c.get(&url).send()?;
+        let resp = c.get(&url).send().await?;
 
         if resp.status() != 200 {
             return Err(format_unexpected_status(
@@ -64,24 +64,26 @@ impl Subscription {
                 resp.status(),
                 &url,
                 resp.text()
+                    .await
                     .unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
         }
 
         resp.json::<Notification>()
+            .await
             .map_err(Into::into)
             .map(Into::into)
     }
 
-    pub fn open(&self, c: &Client) -> Fallible<()> {
-        open::that(self.get_html_url(c)?)
+    pub async fn open(&self, c: &Client) -> Fallible<()> {
+        open::that(self.get_html_url(c).await?)
             .map(|_| ()) // discard ExitStatus
             .map_err(Into::into)
     }
 
-    pub fn fetch_unread(client: &Client) -> Fallible<Vec<Self>> {
+    pub async fn fetch_unread(client: &Client) -> Fallible<Vec<Self>> {
         let url = "https://api.github.com/notifications";
-        let resp = client.get(url).send()?;
+        let resp = client.get(url).send().await?;
 
         if resp.status() != 200 {
             return Err(format_unexpected_status(
@@ -89,12 +91,14 @@ impl Subscription {
                 resp.status(),
                 url,
                 resp.text()
+                    .await
                     .unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
         }
 
         let mut ss = resp
-            .json::<Vec<Notification>>()?
+            .json::<Vec<Notification>>()
+            .await?
             .into_iter()
             .map(Into::into)
             .collect::<Vec<_>>();
@@ -103,9 +107,10 @@ impl Subscription {
             let resp = client
                 .get("https://api.github.com/notifications")
                 .query(&[("page", &i.to_string())])
-                .send()?;
+                .send()
+                .await?;
             if resp.status() == 200 {
-                let ns: Vec<Notification> = resp.json()?;
+                let ns: Vec<Notification> = resp.json().await?;
                 if !ns.is_empty() {
                     ss.extend(ns.into_iter().map(Into::into));
                     continue;
@@ -116,12 +121,12 @@ impl Subscription {
         unreachable!();
     }
 
-    pub fn unsubscribe(&self, client: &Client) -> Fallible<()> {
+    pub async fn unsubscribe(&self, client: &Client) -> Fallible<()> {
         let url = format!(
             "https://api.github.com/notifications/threads/{}/subscription",
             self.thread_id
         );
-        let resp = client.delete(&url).send()?;
+        let resp = client.delete(&url).send().await?;
 
         if resp.status() != 204 {
             return Err(format_unexpected_status(
@@ -129,6 +134,7 @@ impl Subscription {
                 resp.status(),
                 &url,
                 resp.text()
+                    .await
                     .unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
         }
@@ -136,12 +142,12 @@ impl Subscription {
         Ok(())
     }
 
-    pub fn mark_as_read(&self, client: &Client) -> Fallible<()> {
+    pub async fn mark_as_read(&self, client: &Client) -> Fallible<()> {
         let url = format!(
             "https://api.github.com/notifications/threads/{}",
             self.thread_id
         );
-        let resp = client.patch(&url).send()?;
+        let resp = client.patch(&url).send().await?;
 
         if resp.status() != 205 {
             return Err(format_unexpected_status(
@@ -149,6 +155,7 @@ impl Subscription {
                 resp.status(),
                 &url,
                 resp.text()
+                    .await
                     .unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
         }
@@ -157,34 +164,38 @@ impl Subscription {
     }
 
     /// get url for subject's html location
-    pub fn get_html_url(&self, c: &Client) -> Fallible<String> {
+    pub async fn get_html_url(&self, c: &Client) -> Fallible<String> {
         if self.subject_detail.get().is_none() {
-            self.fetch_subject_detail(c)?;
+            self.fetch_subject_detail(c).await?;
         }
         Ok(self.subject_detail.get().unwrap().html_url.to_owned())
     }
 
     /// get subject state (i.e. open or closed)
-    pub fn get_subject_state(&self, c: &Client) -> Fallible<Option<gh_objects::SubjectState>> {
+    pub async fn get_subject_state(
+        &self,
+        c: &Client,
+    ) -> Fallible<Option<gh_objects::SubjectState>> {
         if self.subject_detail.get().is_none() {
-            self.fetch_subject_detail(c)?;
+            self.fetch_subject_detail(c).await?;
         }
         Ok(self.subject_detail.get().unwrap().state)
     }
 
-    fn fetch_subject_detail(&self, c: &Client) -> Fallible<()> {
+    async fn fetch_subject_detail(&self, c: &Client) -> Fallible<()> {
         let url = &self.subject.url;
-        let resp = c.get(url).send()?;
+        let resp = c.get(url).send().await?;
         if resp.status() != 200 {
             return Err(format_unexpected_status(
                 StatusCode::from_u16(200).unwrap(),
                 resp.status(),
                 url,
                 resp.text()
+                    .await
                     .unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
         }
-        let result: gh_objects::SubjectDetail = resp.json()?;
+        let result: gh_objects::SubjectDetail = resp.json().await?;
         self.subject_detail
             .set(result)
             .expect("subject_detail is re-initialized");

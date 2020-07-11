@@ -16,7 +16,7 @@ mod util;
 use crate::subscription::gh_objects::SubjectType;
 use crate::subscription::Subscription;
 
-fn sc_open(m: &ArgMatches<'_>) -> Fallible<()> {
+async fn sc_open(m: &ArgMatches<'_>) -> Fallible<()> {
     let k = m.value_of("kind").and_then(|v| match v {
         "commit" => Some(SubjectType::Commit),
         "issue" => Some(SubjectType::Issue),
@@ -36,7 +36,7 @@ fn sc_open(m: &ArgMatches<'_>) -> Fallible<()> {
             for v in i {
                 let id_str = v.parse();
                 if let Ok(id) = id_str {
-                    if let Ok(s) = Subscription::from_thread_id(id, &c) {
+                    if let Ok(s) = Subscription::from_thread_id(id, &c).await {
                         ids.push(s);
                     } else {
                         return Err(err_msg(format_err!("could not retrieve: {}", id)));
@@ -48,22 +48,23 @@ fn sc_open(m: &ArgMatches<'_>) -> Fallible<()> {
             Ok(ids)
         } else {
             if let Some(i) = m.value_of("filter") {
-                util::fetch_filtered(Some(&RegexSet::new(&[i])?), n, k, &c)
+                util::fetch_filtered(Some(&RegexSet::new(&[i])?), n, k, &c).await
             } else {
-                util::fetch_filtered(None, n, k, &c)
+                util::fetch_filtered(None, n, k, &c).await
             }
         }
     }?;
     println!("Finished filtering, now open {} page(s)...", ss.len());
-    ss.into_iter()
-        .map(|s| -> _ {
-            println!("Open {}", s);
-            s.open(&c)
-        })
-        .collect()
+
+    for s in ss {
+        println!("Open {}", s);
+        s.open(&c).await?
+    }
+
+    Ok(())
 }
 
-fn sc_list(m: &ArgMatches<'_>) -> Fallible<()> {
+async fn sc_list(m: &ArgMatches<'_>) -> Fallible<()> {
     let c = util::create_client()?;
     let k = m.value_of("kind").and_then(|v| match v {
         "commit" => Some(SubjectType::Commit),
@@ -71,21 +72,22 @@ fn sc_list(m: &ArgMatches<'_>) -> Fallible<()> {
         "pr" => Some(SubjectType::PullRequest),
         _ => unreachable!(),
     });
-    let ss: Vec<_> = {
-        if let Some(i) = m.value_of("filter") {
-            util::fetch_filtered(Some(&RegexSet::new(&[i])?), None, k, &c)
-        } else {
-            util::fetch_filtered(None, None, k, &c)
-        }
+
+    let ss: Vec<_> = if let Some(i) = m.value_of("filter") {
+        util::fetch_filtered(Some(&RegexSet::new(&[i])?), None, k, &c).await
+    } else {
+        util::fetch_filtered(None, None, k, &c).await
     }
     .unwrap_or_else(|e: Error| panic!("{} :\n{}", e, e.backtrace()));
+
     for s in ss {
         println!("{}", s);
     }
+
     Ok(())
 }
 
-fn sc_remove(m: &ArgMatches<'_>) -> Fallible<()> {
+async fn sc_remove(m: &ArgMatches<'_>) -> Fallible<()> {
     let k = m.value_of("kind").and_then(|v| match v {
         "commit" => Some(SubjectType::Commit),
         "issue" => Some(SubjectType::Issue),
@@ -100,37 +102,39 @@ fn sc_remove(m: &ArgMatches<'_>) -> Fallible<()> {
     });
     let confirm = m.is_present("confirm");
     let c = util::create_client()?;
-    let re = {
-        if let Some(i) = m.value_of("filter") {
-            RegexSet::new(&[i]).map_err(Into::into)
-        } else {
-            util::compile_regex()
-        }
-    }?;
+    let re = if let Some(i) = m.value_of("filter") {
+        Some(RegexSet::new(&[i]).map_err(failure::Error::from)?)
+    } else if k.is_none() {
+        Some(util::compile_regex()?)
+    } else {
+        None
+    };
 
-    let ss = util::fetch_filtered(Some(&re), n, k, &c)?;
+    let ss = util::fetch_filtered(re.as_ref(), n, k, &c).await?;
     println!("{} notifications left", ss.len());
 
-    util::filter_and_unsubscribe(ss, confirm, &c)
+    util::filter_and_unsubscribe(ss, confirm, &c).await
 }
 
-fn sc_request(m: &ArgMatches<'_>) -> Fallible<()> {
+async fn sc_request(m: &ArgMatches<'_>) -> Fallible<()> {
     let url = m.value_of("URL").unwrap();
     let c = util::create_client()?;
-    let resp = c.get(url).send()?;
+    let resp = c.get(url).send().await?;
     if resp.status() != 200 {
         println!("Failed to GET, status code: {}", resp.status());
     }
     eprintln!("Headers:\n{:?}", resp.headers());
-    if let Ok(i) = resp.text() {
+    if let Ok(i) = resp.text().await {
         println!("{}", i);
     }
     Ok(())
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let m = App::new("github-notification-filter")
         .version(format!("{} (built at {})", crate_version!(), env!("BUILD_DATE")).as_str())
+        .setting(AppSettings::ColoredHelp)
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .subcommand(
             SubCommand::with_name("remove")
@@ -210,11 +214,11 @@ fn main() {
         .get_matches();
 
     match m.subcommand() {
-        ("open", Some(sub_m)) => sc_open(sub_m),
-        ("list", Some(sub_m)) => sc_list(sub_m),
-        ("remove", Some(sub_m)) => sc_remove(sub_m),
-        ("request", Some(sub_m)) => sc_request(sub_m),
-        _ => Ok(()),
+        ("open", Some(sub_m)) => sc_open(sub_m).await,
+        ("list", Some(sub_m)) => sc_list(sub_m).await,
+        ("remove", Some(sub_m)) => sc_remove(sub_m).await,
+        ("request", Some(sub_m)) => sc_request(sub_m).await,
+        _ => unreachable!(),
     }
     .unwrap_or_else(|e: Error| panic!("{} :\n{}", e, e.backtrace()));
 }
