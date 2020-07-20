@@ -80,14 +80,15 @@ pub async fn filter_by_subject_state(
     state: SubjectState,
     c: &Client,
 ) -> Fallible<Vec<Subscription>> {
-    let mut v = vec![];
+    let mut futs = vec![];
     for s in ss {
-        match s.get_subject_state(c).await? {
-            Some(i) if i == state => v.push(s),
-            _ => {}
-        }
+        futs.push(async {match s.get_subject_state(c).await? {
+            Some(i) if i == state => Ok(Some(s)),
+            None => Ok(Some(s)), // commits doesn't have state, but we want to handle them
+            _ => Ok(None)
+        }});
     }
-    Ok(v)
+    futures::future::try_join_all(futs).await.map(|v| v.into_iter().flatten().collect())
 }
 
 pub async fn filter_and_unsubscribe(
@@ -114,13 +115,17 @@ pub async fn filter_and_unsubscribe(
         }
 
         println!("Unsubscribing notifications...");
+        let mut futs = vec![];
         for s in candidates {
-            s.unsubscribe(c).await?;
-            s.mark_as_read(c).await?;
-            println!("Unsubscribed {}", s);
+            futs.push(async move {
+                s.unsubscribe(c).await?;
+                s.mark_as_read(c).await?;
+                println!("Unsubscribed {}", s);
+                Fallible::Ok(())
+            });
         }
+        futures::future::try_join_all(futs).await?;
     }
-
     Ok(())
 }
 
@@ -135,17 +140,26 @@ pub async fn fetch_filtered(
     let ss = Subscription::fetch_unread(c).await?;
     println!("Fetched {} notifications", ss.len());
 
-    println!("Filtering notifications by regex...");
     let ss = if let Some(r) = re {
-        ss.into_iter()
-            .filter(|s| r.is_match(&s.subject.title))
-            .collect()
+        println!("Filtering notifications by regex...");
+        let mut futs = vec![];
+        for s in ss {
+            futs.push(async {
+                if r.is_match(&s.subject.title) {
+                    Some(s)
+                } else {
+                    None
+                }
+            });
+        }
+        futures::future::join_all(futs).await.into_iter().flatten().collect()
     } else {
         ss
     };
 
     // filter by kind
     let ss = if let Some(i) = k {
+        println!("Filtering notifications by kind...");
         ss.into_iter().filter(|s| s.subject.r#type == i).collect()
     } else {
         ss

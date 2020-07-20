@@ -8,6 +8,7 @@
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
 use failure::{err_msg, format_err, Error, Fallible};
+use futures::future;
 use regex::RegexSet;
 
 mod subscription;
@@ -56,10 +57,16 @@ async fn sc_open(m: &ArgMatches<'_>) -> Fallible<()> {
     }?;
     println!("Finished filtering, now open {} page(s)...", ss.len());
 
+    let mut futs = vec![];
     for s in ss {
-        println!("Open {}", s);
-        s.open(&c).await?
+        let c_ref = &c;
+        futs.push(async move {
+            println!("Open {}", s);
+            s.open(c_ref).await
+        });
     }
+
+    future::try_join_all(futs).await?;
 
     Ok(())
 }

@@ -9,7 +9,7 @@ pub use gh_objects::SubjectState;
 
 pub type ThreadID = u64;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Subscription {
     pub subject: gh_objects::Subject,
     pub thread_id: ThreadID,
