@@ -10,6 +10,7 @@ use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
 use failure::{err_msg, format_err, Error, Fallible};
 use futures::future;
 use regex::RegexSet;
+use reqwest::Client;
 
 mod subscription;
 mod util;
@@ -17,7 +18,7 @@ mod util;
 use crate::subscription::gh_objects::SubjectType;
 use crate::subscription::Subscription;
 
-async fn sc_open(m: &ArgMatches<'_>) -> Fallible<()> {
+async fn sc_open(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
     let k = m.value_of("kind").and_then(|v| match v {
         "commit" => Some(SubjectType::Commit),
         "issue" => Some(SubjectType::Issue),
@@ -30,7 +31,6 @@ async fn sc_open(m: &ArgMatches<'_>) -> Fallible<()> {
             std::process::exit(1)
         })
     });
-    let c = util::create_client()?;
     let ss: Vec<Subscription> = {
         if let Some(i) = m.values_of("thread_ids") {
             let mut ids = vec![];
@@ -71,8 +71,7 @@ async fn sc_open(m: &ArgMatches<'_>) -> Fallible<()> {
     Ok(())
 }
 
-async fn sc_list(m: &ArgMatches<'_>) -> Fallible<()> {
-    let c = util::create_client()?;
+async fn sc_list(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
     let k = m.value_of("kind").and_then(|v| match v {
         "commit" => Some(SubjectType::Commit),
         "issue" => Some(SubjectType::Issue),
@@ -94,7 +93,7 @@ async fn sc_list(m: &ArgMatches<'_>) -> Fallible<()> {
     Ok(())
 }
 
-async fn sc_remove(m: &ArgMatches<'_>) -> Fallible<()> {
+async fn sc_remove(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
     let k = m.value_of("kind").and_then(|v| match v {
         "commit" => Some(SubjectType::Commit),
         "issue" => Some(SubjectType::Issue),
@@ -108,7 +107,6 @@ async fn sc_remove(m: &ArgMatches<'_>) -> Fallible<()> {
         })
     });
     let confirm = m.is_present("confirm");
-    let c = util::create_client()?;
     let re = if let Some(i) = m.value_of("filter") {
         Some(RegexSet::new(&[i]).map_err(failure::Error::from)?)
     } else if k.is_none() {
@@ -123,9 +121,8 @@ async fn sc_remove(m: &ArgMatches<'_>) -> Fallible<()> {
     util::filter_and_unsubscribe(ss, confirm, &c).await
 }
 
-async fn sc_request(m: &ArgMatches<'_>) -> Fallible<()> {
+async fn sc_request(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
     let url = m.value_of("URL").unwrap();
-    let c = util::create_client()?;
     let resp = c.get(url).send().await?;
     if resp.status() != 200 {
         println!("Failed to GET, status code: {}", resp.status());
@@ -220,12 +217,13 @@ async fn main() {
         )
         .get_matches();
 
+    let c = util::create_client().unwrap();
     match m.subcommand() {
-        ("open", Some(sub_m)) => sc_open(sub_m).await,
-        ("list", Some(sub_m)) => sc_list(sub_m).await,
-        ("remove", Some(sub_m)) => sc_remove(sub_m).await,
-        ("request", Some(sub_m)) => sc_request(sub_m).await,
+        ("open", Some(sub_m)) => sc_open(sub_m, &c).await,
+        ("list", Some(sub_m)) => sc_list(sub_m, &c).await,
+        ("remove", Some(sub_m)) => sc_remove(sub_m, &c).await,
+        ("request", Some(sub_m)) => sc_request(sub_m, &c).await,
         _ => unreachable!(),
     }
-    .unwrap_or_else(|e: Error| panic!("{} :\n{}", e, e.backtrace()));
+    .unwrap()
 }

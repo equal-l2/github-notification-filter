@@ -5,6 +5,7 @@ use reqwest::StatusCode;
 
 pub mod gh_objects;
 use gh_objects::Notification;
+pub use gh_objects::SubjectDetail;
 pub use gh_objects::SubjectState;
 
 pub type ThreadID = u64;
@@ -14,7 +15,7 @@ pub struct Subscription {
     pub subject: gh_objects::Subject,
     pub thread_id: ThreadID,
     pub repo_name: String,
-    subject_detail: OnceCell<gh_objects::SubjectDetail>,
+    subject_detail: OnceCell<SubjectDetail>,
 }
 
 impl From<Notification> for Subscription {
@@ -76,49 +77,50 @@ impl Subscription {
     }
 
     pub async fn open(&self, c: &Client) -> Fallible<()> {
-        open::that(self.get_html_url(c).await?)
+        open::that(self.html_url(c).await?)
             .map(|_| ()) // discard ExitStatus
             .map_err(Into::into)
     }
 
-    pub async fn fetch_unread(client: &Client) -> Fallible<Vec<Self>> {
+    // TODO: rewrite with Stream
+    pub async fn fetch_unread(client: &Client) -> Fallible<Vec<Vec<Self>>> {
         let url = "https://api.github.com/notifications";
-        let resp = client.get(url).send().await?;
+        let head = client.head(url).send().await?;
+        let last_page = crate::util::get_last_page(head.headers()["Link"].to_str().unwrap());
 
-        if resp.status() != 200 {
-            return Err(format_unexpected_status(
-                StatusCode::from_u16(200).unwrap(),
-                resp.status(),
-                url,
-                resp.text()
-                    .await
-                    .unwrap_or_else(|_| String::from("<Failed to get body>")),
-            ));
+        let mut futs = vec![];
+
+        for i in 1..=last_page {
+            let i_str = i.to_string();
+            futs.push(async move {
+                let resp = client
+                    .get("https://api.github.com/notifications")
+                    .query(&[("page", &i_str)])
+                    .send()
+                    .await?;
+                if resp.status() != 200 {
+                    return Err(format_unexpected_status(
+                        StatusCode::from_u16(200).unwrap(),
+                        resp.status(),
+                        url,
+                        resp.text()
+                            .await
+                            .unwrap_or_else(|_| String::from("<Failed to get body>")),
+                    ));
+                }
+                Ok(resp
+                    .json::<Vec<Notification>>()
+                    .await?
+                    .into_iter()
+                    .map(Into::into))
+            });
         }
 
-        let mut ss = resp
-            .json::<Vec<Notification>>()
+        Ok(futures::future::try_join_all(futs)
             .await?
             .into_iter()
-            .map(Into::into)
-            .collect::<Vec<_>>();
-
-        for i in 2.. {
-            let resp = client
-                .get("https://api.github.com/notifications")
-                .query(&[("page", &i.to_string())])
-                .send()
-                .await?;
-            if resp.status() == 200 {
-                let ns: Vec<Notification> = resp.json().await?;
-                if !ns.is_empty() {
-                    ss.extend(ns.into_iter().map(Into::into));
-                    continue;
-                }
-            }
-            return Ok(ss);
-        }
-        unreachable!();
+            .map(Iterator::collect)
+            .collect())
     }
 
     pub async fn unsubscribe(&self, client: &Client) -> Fallible<()> {
@@ -164,25 +166,16 @@ impl Subscription {
     }
 
     /// get url for subject's html location
-    pub async fn get_html_url(&self, c: &Client) -> Fallible<String> {
-        if self.subject_detail.get().is_none() {
-            self.fetch_subject_detail(c).await?;
-        }
-        Ok(self.subject_detail.get().unwrap().html_url.to_owned())
+    pub async fn html_url(&self, c: &Client) -> Fallible<String> {
+        Ok(self.subject_detail(c).await?.html_url.to_owned())
     }
 
     /// get subject state (i.e. open or closed)
-    pub async fn get_subject_state(
-        &self,
-        c: &Client,
-    ) -> Fallible<Option<gh_objects::SubjectState>> {
-        if self.subject_detail.get().is_none() {
-            self.fetch_subject_detail(c).await?;
-        }
-        Ok(self.subject_detail.get().unwrap().state)
+    pub async fn subject_state(&self, c: &Client) -> Fallible<Option<gh_objects::SubjectState>> {
+        Ok(self.subject_detail(c).await?.state)
     }
 
-    async fn fetch_subject_detail(&self, c: &Client) -> Fallible<()> {
+    async fn fetch_subject_detail(&self, c: &Client) -> Fallible<SubjectDetail> {
         let url = &self.subject.url;
         let resp = c.get(url).send().await?;
         if resp.status() != 200 {
@@ -195,10 +188,16 @@ impl Subscription {
                     .unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
         }
-        let result: gh_objects::SubjectDetail = resp.json().await?;
-        self.subject_detail
-            .set(result)
-            .expect("subject_detail is re-initialized");
-        Ok(())
+        resp.json().await.map_err(Into::into)
+    }
+
+    async fn subject_detail(&self, c: &Client) -> Fallible<&SubjectDetail> {
+        if self.subject_detail.get().is_none() {
+            let res = self.fetch_subject_detail(c).await?;
+            self.subject_detail
+                .set(res)
+                .expect("subject_detail is re-initialized");
+        }
+        Ok(self.subject_detail.get().unwrap())
     }
 }
