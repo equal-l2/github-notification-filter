@@ -9,7 +9,6 @@
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
 use failure::{err_msg, format_err, Error, Fallible};
 use futures::future;
-use regex::RegexSet;
 use reqwest::Client;
 
 mod subscription;
@@ -17,20 +16,9 @@ mod util;
 
 use crate::subscription::gh_objects::SubjectType;
 use crate::subscription::Subscription;
+use util::Filters;
 
 async fn sc_open(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
-    let k = m.value_of("kind").and_then(|v| match v {
-        "commit" => Some(SubjectType::Commit),
-        "issue" => Some(SubjectType::Issue),
-        "pr" => Some(SubjectType::PullRequest),
-        _ => unreachable!(),
-    });
-    let n = m.value_of("count").map(|v| {
-        v.parse().unwrap_or_else(|_| {
-            eprintln!("Invalid argument for <count>, expected integer");
-            std::process::exit(1)
-        })
-    });
     let ss: Vec<Subscription> = {
         if let Some(i) = m.values_of("thread_ids") {
             let mut ids = vec![];
@@ -48,11 +36,7 @@ async fn sc_open(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
             }
             Ok(ids)
         } else {
-            if let Some(i) = m.value_of("filter") {
-                util::fetch_filtered(Some(&RegexSet::new(&[i])?), n, k, &c).await
-            } else {
-                util::fetch_filtered(None, n, k, &c).await
-            }
+            util::fetch_filtered(Filters::new(m, false)?, &c).await
         }
     }?;
     println!("Finished filtering, now open {} page(s)...", ss.len());
@@ -72,19 +56,7 @@ async fn sc_open(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
 }
 
 async fn sc_list(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
-    let k = m.value_of("kind").and_then(|v| match v {
-        "commit" => Some(SubjectType::Commit),
-        "issue" => Some(SubjectType::Issue),
-        "pr" => Some(SubjectType::PullRequest),
-        _ => unreachable!(),
-    });
-
-    let ss: Vec<_> = if let Some(i) = m.value_of("filter") {
-        util::fetch_filtered(Some(&RegexSet::new(&[i])?), None, k, &c).await
-    } else {
-        util::fetch_filtered(None, None, k, &c).await
-    }
-    .unwrap_or_else(|e: Error| panic!("{} :\n{}", e, e.backtrace()));
+    let ss = util::fetch_filtered(Filters::new(m, false)?, &c).await.unwrap_or_else(|e: Error| panic!("{} :\n{}", e, e.backtrace()));
 
     for s in ss {
         println!("{}", s);
@@ -94,31 +66,12 @@ async fn sc_list(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
 }
 
 async fn sc_remove(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
-    let k = m.value_of("kind").and_then(|v| match v {
-        "commit" => Some(SubjectType::Commit),
-        "issue" => Some(SubjectType::Issue),
-        "pr" => Some(SubjectType::PullRequest),
-        _ => unreachable!(),
-    });
-    let n = m.value_of("count").map(|v| {
-        v.parse().unwrap_or_else(|_| {
-            eprintln!("Invalid argument for <count>, expected integer");
-            std::process::exit(1)
-        })
-    });
-    let confirm = m.is_present("confirm");
-    let re = if let Some(i) = m.value_of("filter") {
-        Some(RegexSet::new(&[i]).map_err(failure::Error::from)?)
-    } else if k.is_none() {
-        Some(util::compile_regex()?)
-    } else {
-        None
-    };
+    let dry = m.is_present("dry-run");
 
-    let ss = util::fetch_filtered(re.as_ref(), n, k, &c).await?;
+    let ss = util::fetch_filtered(Filters::new(m, true)?, &c).await?;
     println!("{} notifications left", ss.len());
 
-    util::filter_and_unsubscribe(ss, confirm, &c).await
+    util::filter_and_unsubscribe(ss, dry, &c).await
 }
 
 async fn sc_request(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
@@ -144,10 +97,10 @@ async fn main() {
             SubCommand::with_name("remove")
                 .about("Unsubscribe notifications by regex")
                 .args(&[
-                    Arg::with_name("confirm")
-                        .help("Pause before unsubscription")
-                        .long("confirm")
-                        .short("c"),
+                    Arg::with_name("dry-run")
+                        .help("Do not unsubscribe, but list threads to be unsubscribed")
+                        .long("dry-run")
+                        .short("d"),
                     Arg::with_name("count")
                         .help("only process specified count (the order is undetermined)")
                         .short("n")

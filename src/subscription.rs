@@ -15,6 +15,7 @@ pub struct Subscription {
     pub subject: gh_objects::Subject,
     pub thread_id: ThreadID,
     pub repo_name: String,
+    pub updated_at: String, //TODO: use correct type
     subject_detail: OnceCell<SubjectDetail>,
 }
 
@@ -22,9 +23,10 @@ impl From<Notification> for Subscription {
     fn from(n: Notification) -> Self {
         Self {
             subject: n.subject,
-            thread_id: n.url.split('/').last().unwrap().parse().unwrap(),
+            thread_id: n.id.parse().unwrap(),
             repo_name: n.repository.full_name,
             subject_detail: OnceCell::new(),
+            updated_at: n.updated_at,
         }
     }
 }
@@ -33,8 +35,8 @@ impl std::fmt::Display for Subscription {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "[{}] {} : {} ({})",
-            self.subject.r#type, self.repo_name, self.subject.title, self.thread_id
+            "[{}] {} : {} ({}) at {}",
+            self.subject.r#type, self.repo_name, self.subject.title, self.thread_id, self.updated_at
         )
     }
 }

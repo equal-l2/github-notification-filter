@@ -5,6 +5,40 @@ use reqwest::Client;
 use crate::subscription::{SubjectState, Subscription, ThreadID};
 use crate::SubjectType;
 
+pub struct Filters {
+    regex: Option<RegexSet>,
+    kind: Option<SubjectType>,
+    count: Option<usize>,
+}
+
+impl Filters {
+    pub fn new(m: &clap::ArgMatches<'_>, with_default_regex: bool) -> Fallible<Self> {
+        Ok(Self {
+            regex: {
+                if let Some(i) = m.value_of("filter") {
+                    Some(RegexSet::new(&[i])?)
+                } else if with_default_regex {
+                    Some(compile_regex()?)
+                } else {
+                    None
+                }
+            },
+            kind: m.value_of("kind").and_then(|v| match v {
+                "commit" => Some(SubjectType::Commit),
+                "issue" => Some(SubjectType::Issue),
+                "pr" => Some(SubjectType::PullRequest),
+                _ => unreachable!(),
+            }),
+            count: m.value_of("count").map(|v| {
+                v.parse().unwrap_or_else(|_| {
+                    eprintln!("Invalid argument for <count>, expected integer");
+                    std::process::exit(1)
+                })
+            }),
+        })
+    }
+}
+
 const CHUNK_SIZE: usize = 64;
 
 pub fn read_config(filename: &str) -> Fallible<String> {
@@ -108,7 +142,7 @@ pub async fn filter_by_subject_state(
 
 pub async fn filter_and_unsubscribe(
     ss: Vec<Subscription>,
-    confirm: bool,
+    dry: bool,
     c: &Client,
 ) -> Fallible<()> {
     println!("Filtering out open notifications...");
@@ -119,14 +153,12 @@ pub async fn filter_and_unsubscribe(
     if candidates.is_empty() {
         println!("No notification matched");
     } else {
-        if confirm {
+        if dry {
+            println!("\nFollowing threads are going to be unsubscribed:");
             for s in &candidates {
                 println!("{}", s);
             }
-
-            println!("\nTo unsubscribe the notification(s), press Enter\n(If you don't want to, just abort (e.g. Ctrl+C))");
-            let mut s = String::new();
-            let _ = std::io::stdin().read_line(&mut s)?;
+            return Ok(())
         }
 
         println!("Unsubscribing notifications...");
@@ -154,9 +186,7 @@ pub async fn filter_and_unsubscribe(
 }
 
 pub async fn fetch_filtered(
-    re: Option<&RegexSet>,
-    n: Option<usize>,
-    k: Option<SubjectType>,
+    filt: Filters,
     c: &Client,
 ) -> Fallible<Vec<Subscription>> {
     println!("Fetching notifications...");
@@ -170,7 +200,7 @@ pub async fn fetch_filtered(
         sum
     });
 
-    let ss: Vec<Subscription> = if let Some(r) = re {
+    let ss: Vec<Subscription> = if let Some(r) = filt.regex {
         println!("Filtering notifications by regex...");
         let mut futs = vec![];
         for ss in svec {
@@ -196,14 +226,14 @@ pub async fn fetch_filtered(
     };
 
     // filter by kind
-    let ss = if let Some(i) = k {
+    let ss = if let Some(i) = filt.kind {
         println!("Filtering notifications by kind...");
         ss.into_iter().filter(|s| s.subject.r#type == i).collect()
     } else {
         ss
     };
 
-    if let Some(i) = n {
+    if let Some(i) = filt.count {
         Ok(ss.into_iter().take(i).collect())
     } else {
         Ok(ss)

@@ -1,16 +1,15 @@
 #[derive(Clone, Debug, serde::Deserialize)]
 pub struct Notification {
-    pub subject: Subject,
-    pub url: String,
+    pub id: String,
     pub repository: Repository,
-    // not currently used
-    /*
-    id: String,
-    last_read_at: Option<String>,
-    reason: String,
-    subscription_url: String,
-    unread: bool,
-    updated_at: Option<String>,
+    pub subject: Subject,
+    pub updated_at: String,
+    /* fields not currently used:
+    pub url: String,
+    pub last_read_at: Option<String>,
+    pub reason: String,
+    pub subscription_url: String,
+    pub unread: bool,
     */
 }
 
