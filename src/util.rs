@@ -140,11 +140,7 @@ pub async fn filter_by_subject_state(
     Ok(ret)
 }
 
-pub async fn filter_and_unsubscribe(
-    ss: Vec<Subscription>,
-    dry: bool,
-    c: &Client,
-) -> Fallible<()> {
+pub async fn filter_and_unsubscribe(ss: Vec<Subscription>, dry: bool, c: &Client) -> Fallible<()> {
     println!("Filtering out open notifications...");
     let candidates: Vec<Subscription> =
         filter_by_subject_state(filter_ignored(ss).unwrap(), SubjectState::Closed, c).await?;
@@ -158,7 +154,7 @@ pub async fn filter_and_unsubscribe(
             for s in &candidates {
                 println!("{}", s);
             }
-            return Ok(())
+            return Ok(());
         }
 
         println!("Unsubscribing notifications...");
@@ -185,10 +181,7 @@ pub async fn filter_and_unsubscribe(
     Ok(())
 }
 
-pub async fn fetch_filtered(
-    filt: Filters,
-    c: &Client,
-) -> Fallible<Vec<Subscription>> {
+pub async fn fetch_filtered(filt: Filters, c: &Client) -> Fallible<Vec<Subscription>> {
     println!("Fetching notifications...");
 
     let svec = Subscription::fetch_unread(c).await?;

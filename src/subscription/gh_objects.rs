@@ -1,4 +1,6 @@
-#[derive(Clone, Debug, serde::Deserialize)]
+use serde::Deserialize;
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct Notification {
     pub id: String,
     pub repository: Repository,
@@ -13,7 +15,7 @@ pub struct Notification {
     */
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Subject {
     pub title: String,
     pub url: String,
@@ -22,7 +24,7 @@ pub struct Subject {
     //latest_comment_url: Option<String>,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(field_identifier)]
 pub enum SubjectType {
     Issue,
@@ -40,14 +42,14 @@ impl std::fmt::Display for SubjectType {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SubjectState {
     Open,
     Closed,
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct SubjectDetail {
     pub url: String,
     pub html_url: String,
@@ -55,7 +57,7 @@ pub struct SubjectDetail {
     pub title: Option<String>,       // doesn't exist for commits
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Repository {
     pub full_name: String,
 }

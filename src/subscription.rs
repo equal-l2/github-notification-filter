@@ -36,7 +36,11 @@ impl std::fmt::Display for Subscription {
         write!(
             f,
             "[{}] {} : {} ({}) at {}",
-            self.subject.r#type, self.repo_name, self.subject.title, self.thread_id, self.updated_at
+            self.subject.r#type,
+            self.repo_name,
+            self.subject.title,
+            self.thread_id,
+            self.updated_at
         )
     }
 }
@@ -72,8 +76,7 @@ impl Subscription {
             ));
         }
 
-        resp.json::<Notification>()
-            .await
+        serde_json::from_str::<Notification>(&resp.text().await?)
             .map_err(Into::into)
             .map(Into::into)
     }
@@ -110,11 +113,11 @@ impl Subscription {
                             .unwrap_or_else(|_| String::from("<Failed to get body>")),
                     ));
                 }
-                Ok(resp
-                    .json::<Vec<Notification>>()
-                    .await?
-                    .into_iter()
-                    .map(Into::into))
+                Ok(
+                    serde_json::from_str::<Vec<Notification>>(&resp.text().await?)?
+                        .into_iter()
+                        .map(Into::into),
+                )
             });
         }
 
@@ -190,7 +193,7 @@ impl Subscription {
                     .unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
         }
-        resp.json().await.map_err(Into::into)
+        serde_json::from_str(&resp.text().await?).map_err(Into::into)
     }
 
     async fn subject_detail(&self, c: &Client) -> Fallible<&SubjectDetail> {

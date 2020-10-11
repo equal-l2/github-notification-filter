@@ -56,7 +56,9 @@ async fn sc_open(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
 }
 
 async fn sc_list(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
-    let ss = util::fetch_filtered(Filters::new(m, false)?, &c).await.unwrap_or_else(|e: Error| panic!("{} :\n{}", e, e.backtrace()));
+    let ss = util::fetch_filtered(Filters::new(m, false)?, &c)
+        .await
+        .unwrap_or_else(|e: Error| panic!("{} :\n{}", e, e.backtrace()));
 
     for s in ss {
         println!("{}", s);
