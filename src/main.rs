@@ -39,7 +39,7 @@ async fn sc_open(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
             util::fetch_filtered(Filters::new(m, false)?, &c).await
         }
     }?;
-    println!("Finished filtering, now open {} page(s)...", ss.len());
+    println!("Opening {} page(s)...", ss.len());
 
     let mut futs = vec![];
     for s in ss {
@@ -60,9 +60,10 @@ async fn sc_list(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
         .await
         .unwrap_or_else(|e: Error| panic!("{} :\n{}", e, e.backtrace()));
 
-    for s in ss {
+    for s in &ss {
         println!("{}", s);
     }
+    println!("Total entry count: {}", ss.len());
 
     Ok(())
 }

@@ -36,7 +36,7 @@ impl std::fmt::Display for SubjectType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Issue => write!(f, "Issue"),
-            Self::PullRequest => write!(f, "Pull Request"),
+            Self::PullRequest => write!(f, "PullReq"),
             Self::Commit => write!(f, "Commit"),
         }
     }
