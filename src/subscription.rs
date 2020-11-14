@@ -49,7 +49,7 @@ fn format_unexpected_status(
     expected: StatusCode,
     actual: StatusCode,
     url: &str,
-    body: String,
+    body: &str,
 ) -> failure::Error {
     err_msg(format_err!(
         "Unexpected HTTP Status {} (Expected {})\nURL: {}\nBody: {}",
@@ -70,7 +70,7 @@ impl Subscription {
                 StatusCode::from_u16(200).unwrap(),
                 resp.status(),
                 &url,
-                resp.text()
+                &resp.text()
                     .await
                     .unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
@@ -108,7 +108,7 @@ impl Subscription {
                         StatusCode::from_u16(200).unwrap(),
                         resp.status(),
                         url,
-                        resp.text()
+                        &resp.text()
                             .await
                             .unwrap_or_else(|_| String::from("<Failed to get body>")),
                     ));
@@ -140,7 +140,7 @@ impl Subscription {
                 StatusCode::from_u16(204).unwrap(),
                 resp.status(),
                 &url,
-                resp.text()
+                &resp.text()
                     .await
                     .unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
@@ -161,7 +161,7 @@ impl Subscription {
                 StatusCode::from_u16(205).unwrap(),
                 resp.status(),
                 &url,
-                resp.text()
+                &resp.text()
                     .await
                     .unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));
@@ -188,7 +188,7 @@ impl Subscription {
                 StatusCode::from_u16(200).unwrap(),
                 resp.status(),
                 url,
-                resp.text()
+                &resp.text()
                     .await
                     .unwrap_or_else(|_| String::from("<Failed to get body>")),
             ));

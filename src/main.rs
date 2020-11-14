@@ -5,6 +5,7 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::fallible_impl_from)]
 #![allow(clippy::filter_map)]
+#![allow(clippy::future_not_send)]
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
 use failure::{err_msg, format_err, Error, Fallible};
@@ -25,7 +26,7 @@ async fn sc_open(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
             for v in i {
                 let id_str = v.parse();
                 if let Ok(id) = id_str {
-                    if let Ok(s) = Subscription::from_thread_id(id, &c).await {
+                    if let Ok(s) = Subscription::from_thread_id(id, c).await {
                         ids.push(s);
                     } else {
                         return Err(err_msg(format_err!("could not retrieve: {}", id)));
@@ -36,19 +37,15 @@ async fn sc_open(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
             }
             Ok(ids)
         } else {
-            util::fetch_filtered(Filters::new(m, false)?, &c).await
+            util::fetch_filtered(Filters::new(m, false)?, c).await
         }
     }?;
     println!("Opening {} page(s)...", ss.len());
 
-    let mut futs = vec![];
-    for s in ss {
-        let c_ref = &c;
-        futs.push(async move {
-            println!("Open {}", s);
-            s.open(c_ref).await
-        });
-    }
+    let futs = ss.into_iter().map(|s| async move {
+        println!("Open {}", s);
+        s.open(c).await
+    });
 
     future::try_join_all(futs).await?;
 
@@ -56,7 +53,7 @@ async fn sc_open(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
 }
 
 async fn sc_list(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
-    let ss = util::fetch_filtered(Filters::new(m, false)?, &c)
+    let ss = util::fetch_filtered(Filters::new(m, false)?, c)
         .await
         .unwrap_or_else(|e: Error| panic!("{} :\n{}", e, e.backtrace()));
 
@@ -71,10 +68,10 @@ async fn sc_list(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
 async fn sc_remove(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
     let dry = m.is_present("dry-run");
 
-    let ss = util::fetch_filtered(Filters::new(m, true)?, &c).await?;
+    let ss = util::fetch_filtered(Filters::new(m, true)?, c).await?;
     println!("{} notifications left", ss.len());
 
-    util::filter_and_unsubscribe(ss, dry, &c).await
+    util::filter_and_unsubscribe(ss, dry, c).await
 }
 
 async fn sc_request(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {

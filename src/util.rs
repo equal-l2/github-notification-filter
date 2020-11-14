@@ -1,4 +1,5 @@
 use failure::{err_msg, Fallible};
+use futures::future::try_join_all;
 use regex::RegexSet;
 use reqwest::Client;
 
@@ -50,18 +51,13 @@ pub fn read_config(filename: &str) -> Fallible<String> {
 }
 
 pub fn compile_regex() -> Fallible<RegexSet> {
-    RegexSet::new(
+    regex::RegexSetBuilder::new(
         read_config("filters")
             .expect("Failed to read filters from ~/.ghnf/filters")
-            .split('\n')
-            .filter_map(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(String::from("(?i)") + s)
-                }
-            }),
+            .split('\n'),
     )
+    .case_insensitive(true)
+    .build()
     .map_err(Into::into)
 }
 
@@ -87,15 +83,13 @@ pub fn create_client() -> Fallible<Client> {
 pub fn load_ignored() -> Fallible<Vec<ThreadID>> {
     // `ignore` is optional, return empty vec when not found
     read_config("ignore")
-        .or_else(|e| -> _ {
+        .or_else(|e| {
             if let Some(i) = e.as_fail().downcast_ref::<std::io::Error>() {
-                match i.kind() {
-                    std::io::ErrorKind::NotFound => Ok("".into()),
-                    _ => Err(e),
+                if matches!(i.kind(), std::io::ErrorKind::NotFound) {
+                    return Ok("".into());
                 }
-            } else {
-                Err(e)
             }
+            Err(e)
         })?
         .split('\n')
         .filter(|s| !s.is_empty())
@@ -128,13 +122,13 @@ pub async fn filter_by_subject_state(
         });
         if futs.len() >= CHUNK_SIZE {
             //eprintln!("join!");
-            let r: Fallible<_> = futures::future::try_join_all(futs.drain(..)).await;
+            let r: Fallible<_> = try_join_all(futs.drain(..)).await;
             ret.extend(r?.into_iter().flatten());
         }
     }
     {
         //eprintln!("final join!");
-        let r: Fallible<_> = futures::future::try_join_all(futs).await;
+        let r: Fallible<_> = try_join_all(futs).await;
         ret.extend(r?.into_iter().flatten());
     }
     Ok(ret)
@@ -148,36 +142,31 @@ pub async fn filter_and_unsubscribe(ss: Vec<Subscription>, dry: bool, c: &Client
 
     if candidates.is_empty() {
         println!("No notification matched");
-    } else {
-        if dry {
-            println!("\nFollowing threads are going to be unsubscribed:");
-            for s in &candidates {
-                println!("{}", s);
-            }
-            return Ok(());
-        }
+        return Ok(());
+    }
 
-        println!("Unsubscribing notifications...");
-        let mut futs = vec![];
-        for s in candidates {
-            futs.push(async move {
-                s.unsubscribe(c).await?;
-                s.mark_as_read(c).await?;
-                println!("Unsubscribed {}", s);
-                Fallible::Ok(())
-            });
-            if futs.len() >= CHUNK_SIZE {
-                //eprintln!("join!");
-                let r: Fallible<_> = futures::future::try_join_all(futs.drain(..)).await;
-                r?;
-            }
+    if dry {
+        println!("\nFollowing threads are going to be unsubscribed:");
+        for s in &candidates {
+            println!("{}", s);
         }
-        {
-            //eprintln!("final join!");
-            let r: Fallible<_> = futures::future::try_join_all(futs).await;
-            r?;
+        return Ok(());
+    }
+
+    println!("Unsubscribing notifications...");
+    let mut futs = vec![];
+    for s in candidates {
+        futs.push(async move {
+            s.unsubscribe(c).await?;
+            s.mark_as_read(c).await?;
+            println!("Unsubscribed {}", s);
+            Fallible::Ok(())
+        });
+        if futs.len() >= CHUNK_SIZE {
+            try_join_all(futs.drain(..)).await?;
         }
     }
+    try_join_all(futs).await?;
     Ok(())
 }
 
@@ -185,28 +174,23 @@ pub async fn fetch_filtered(filt: Filters, c: &Client) -> Fallible<Vec<Subscript
     println!("Fetching notifications...");
 
     let svec = Subscription::fetch_unread(c).await?;
-    println!("Fetched {} notifications", {
-        let mut sum = 0;
-        for ss in svec.iter() {
-            sum += ss.len()
-        }
-        sum
-    });
+    println!(
+        "Fetched {} notifications",
+        svec.iter().map(|ss| ss.len()).sum::<usize>()
+    );
 
     let ss: Vec<Subscription> = if let Some(r) = filt.regex {
         println!("Filtering notifications by regex...");
         let mut futs = vec![];
         for ss in svec {
             futs.push(async {
-                ss.into_iter()
-                    .map(|s| {
-                        if r.is_match(&s.subject.title) {
-                            Some(s)
-                        } else {
-                            None
-                        }
-                    })
-                    .flatten()
+                ss.into_iter().flat_map(|s| {
+                    if r.is_match(&s.subject.title) {
+                        Some(s)
+                    } else {
+                        None
+                    }
+                })
             });
         }
         futures::future::join_all::<Vec<_>>(futs)
@@ -226,11 +210,14 @@ pub async fn fetch_filtered(filt: Filters, c: &Client) -> Fallible<Vec<Subscript
         ss
     };
 
-    if let Some(i) = filt.count {
-        Ok(ss.into_iter().take(i).collect())
+    // handle count
+    let ss = if let Some(i) = filt.count {
+        ss.into_iter().take(i).collect()
     } else {
-        Ok(ss)
-    }
+        ss
+    };
+
+    Ok(ss)
 }
 
 pub fn get_last_page(link: &str) -> usize {
