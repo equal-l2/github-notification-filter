@@ -6,7 +6,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        rust: [1.37.0, stable, nightly]
+        rust:
+          - 1.37.0
+          - stable
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -17,6 +20,7 @@ jobs:
           components: clippy
           override: true
           profile: minimal
+          toolchain: ${{ matrix.rust }}
 
       - name: Show version
         uses: actions-rs/cargo@v1
