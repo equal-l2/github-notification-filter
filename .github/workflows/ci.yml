@@ -8,18 +8,28 @@ jobs:
       matrix:
         rust: [1.37.0, stable, nightly]
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
         with:
-          profile: minimal
           components: clippy
-      - uses: actions-rs/cargo@v1
+          override: true
+          profile: minimal
+
+      - name: Show version
+        uses: actions-rs/cargo@v1
         with:
           command: version
-      - uses: actions-rs/cargo@v1
+
+      - name: Build code
+        uses: actions-rs/cargo@v1
         with:
           command: build
-      - uses: actions-rs/cargo@v1
+
+      - name: Run clippy
+        uses: actions-rs/cargo@v1
         with:
           command: clippy
           args: -- -D warnings
