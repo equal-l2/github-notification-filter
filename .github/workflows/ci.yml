@@ -1,0 +1,39 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - 1.37.0
+          - stable
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          components: clippy
+          override: true
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+
+      - name: Show version
+        uses: actions-rs/cargo@v1
+        with:
+          command: version
+
+      - name: Build code
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+
+      - name: Run clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: -- -D warnings
