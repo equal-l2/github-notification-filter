@@ -3,6 +3,7 @@ on: [push, pull_request]
 
 jobs:
   ci:
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         rust: [1.37.0, stable, nightly]
@@ -12,6 +13,9 @@ jobs:
         with:
           profile: minimal
           components: clippy
+      - uses: actions-rs/cargo@v1
+        with:
+          command: version
       - uses: actions-rs/cargo@v1
         with:
           command: build
