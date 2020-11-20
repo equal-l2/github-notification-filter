@@ -26,9 +26,9 @@ default-features = false
 features = ["derive"]
 
 [dependencies.tokio]
-version = "0.3.4"
+version = "0.2.23"
 default-features = false
-features = ["macros", "rt-multi-thread"]
+features = ["macros", "rt-threaded"]
 
 [dependencies.reqwest]
 version = "0.10.9"
