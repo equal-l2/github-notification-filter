@@ -1,4 +1,4 @@
-use failure::{err_msg, format_err, Fallible};
+use failure::Fallible;
 use once_cell::unsync::OnceCell;
 use reqwest::Client;
 use reqwest::StatusCode;
@@ -45,19 +45,36 @@ impl std::fmt::Display for Subscription {
     }
 }
 
-fn format_unexpected_status(
-    expected: StatusCode,
-    actual: StatusCode,
-    url: &str,
-    body: &str,
-) -> failure::Error {
-    err_msg(format_err!(
-        "Unexpected HTTP Status {} (Expected {})\nURL: {}\nBody: {}",
-        actual,
-        expected,
-        url,
-        body
-    ))
+async fn error_unexpected_status(expected: u16, resp: reqwest::Response) -> failure::Error {
+    use std::fmt::Write;
+
+    let mut ret = format!(
+        "Unexpected HTTP Status {} (Expected {})\nURL: {}",
+        resp.status(),
+        StatusCode::from_u16(expected).unwrap(),
+        resp.url(),
+    );
+
+    {
+        write!(ret, "\nHeaders:").unwrap();
+
+        let headers = resp.headers();
+        for (k, v) in headers {
+            let v = v.to_str().unwrap_or("<Not representable in string>");
+            write!(ret, "\n{} : {}", k, v).unwrap();
+        }
+    }
+
+    write!(
+        ret,
+        "\nBody: {}",
+        resp.text()
+            .await
+            .unwrap_or_else(|_| String::from("<Failed to get body>"))
+    )
+    .unwrap();
+
+    failure::err_msg(ret)
 }
 
 impl Subscription {
@@ -66,14 +83,7 @@ impl Subscription {
         let resp = c.get(&url).send().await?;
 
         if resp.status() != 200 {
-            return Err(format_unexpected_status(
-                StatusCode::from_u16(200).unwrap(),
-                resp.status(),
-                &url,
-                &resp.text()
-                    .await
-                    .unwrap_or_else(|_| String::from("<Failed to get body>")),
-            ));
+            return Err(error_unexpected_status(200, resp).await);
         }
 
         serde_json::from_str::<Notification>(&resp.text().await?)
@@ -104,14 +114,7 @@ impl Subscription {
                     .send()
                     .await?;
                 if resp.status() != 200 {
-                    return Err(format_unexpected_status(
-                        StatusCode::from_u16(200).unwrap(),
-                        resp.status(),
-                        url,
-                        &resp.text()
-                            .await
-                            .unwrap_or_else(|_| String::from("<Failed to get body>")),
-                    ));
+                    return Err(error_unexpected_status(200, resp).await);
                 }
                 Ok(
                     serde_json::from_str::<Vec<Notification>>(&resp.text().await?)?
@@ -136,14 +139,7 @@ impl Subscription {
         let resp = client.delete(&url).send().await?;
 
         if resp.status() != 204 {
-            return Err(format_unexpected_status(
-                StatusCode::from_u16(204).unwrap(),
-                resp.status(),
-                &url,
-                &resp.text()
-                    .await
-                    .unwrap_or_else(|_| String::from("<Failed to get body>")),
-            ));
+            return Err(error_unexpected_status(204, resp).await);
         }
 
         Ok(())
@@ -157,14 +153,7 @@ impl Subscription {
         let resp = client.patch(&url).send().await?;
 
         if resp.status() != 205 {
-            return Err(format_unexpected_status(
-                StatusCode::from_u16(205).unwrap(),
-                resp.status(),
-                &url,
-                &resp.text()
-                    .await
-                    .unwrap_or_else(|_| String::from("<Failed to get body>")),
-            ));
+            return Err(error_unexpected_status(205, resp).await);
         }
 
         Ok(())
@@ -184,14 +173,7 @@ impl Subscription {
         let url = &self.subject.url;
         let resp = c.get(url).send().await?;
         if resp.status() != 200 {
-            return Err(format_unexpected_status(
-                StatusCode::from_u16(200).unwrap(),
-                resp.status(),
-                url,
-                &resp.text()
-                    .await
-                    .unwrap_or_else(|_| String::from("<Failed to get body>")),
-            ));
+            return Err(error_unexpected_status(200, resp).await);
         }
         serde_json::from_str(&resp.text().await?).map_err(Into::into)
     }

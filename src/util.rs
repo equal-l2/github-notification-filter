@@ -176,7 +176,7 @@ pub async fn fetch_filtered(filt: Filters, c: &Client) -> Fallible<Vec<Subscript
     let svec = Subscription::fetch_unread(c).await?;
     println!(
         "Fetched {} notifications",
-        svec.iter().map(|ss| ss.len()).sum::<usize>()
+        svec.iter().map(Vec::len).sum::<usize>()
     );
 
     let ss: Vec<Subscription> = if let Some(r) = filt.regex {
