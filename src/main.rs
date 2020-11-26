@@ -8,7 +8,7 @@
 #![allow(clippy::match_wildcard_for_single_variants)]
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
-use failure::{format_err, Error, Fallible};
+use failure::{bail, Error, Fallible};
 use futures::future;
 use reqwest::Client;
 
@@ -29,10 +29,10 @@ async fn sc_open(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
                     if let Ok(s) = Subscription::from_thread_id(id, c).await {
                         ids.push(s);
                     } else {
-                        return Err(format_err!("could not retrieve: {}", id));
+                        bail!("could not retrieve: {}", id);
                     }
                 } else {
-                    return Err(format_err!("malformed input: {}", v));
+                    bail!("malformed input: {}", v);
                 }
             }
             Ok(ids)

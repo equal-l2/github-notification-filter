@@ -77,6 +77,7 @@ pub fn create_client() -> Fallible<Client> {
     Client::builder()
         .user_agent("GitHub Notification Filter (by equal-l2)")
         .default_headers(headers)
+        .pool_idle_timeout(std::time::Duration::from_secs(30)) // ++ritual++ for retrying
         .build()
         .map_err(Into::into)
 }
@@ -115,10 +116,16 @@ pub async fn filter_by_subject_state(
     let mut ret = vec![];
     for s in ss {
         futs.push(async {
-            match s.subject_state(c).await? {
-                Some(i) if i == state => Ok(Some(s)),
-                None => Ok(Some(s)), // commits doesn't have state but we want to handle them
-                _ => Ok(None),
+            match s.subject.r#type {
+                // Commits don't have state but we want to handle them
+                SubjectType::Commit => Ok(Some(s)),
+                // Just ignore discussions at this moment (until GitHub fixes FIXME!)
+                SubjectType::Discussion => Ok(None),
+                // Now look at the state
+                _ => match s.subject_state(c).await? {
+                    Some(i) if i == state => Ok(Some(s)),
+                    _ => Ok(None),
+                },
             }
         });
         if futs.len() >= CHUNK_SIZE {

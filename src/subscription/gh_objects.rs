@@ -18,7 +18,7 @@ pub struct Notification {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Subject {
     pub title: String,
-    pub url: String,
+    pub url: Option<String>, // not exists for discussions (This must be a FIXME, GitHub!)
     pub r#type: SubjectType,
     // not currently used
     //latest_comment_url: Option<String>,
@@ -27,17 +27,19 @@ pub struct Subject {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(field_identifier)]
 pub enum SubjectType {
+    Commit,
+    Discussion,
     Issue,
     PullRequest,
-    Commit,
 }
 
 impl std::fmt::Display for SubjectType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Commit => write!(f, "Commit"),
+            Self::Discussion => write!(f, "Discuss"),
             Self::Issue => write!(f, "Issue"),
             Self::PullRequest => write!(f, "PullReq"),
-            Self::Commit => write!(f, "Commit"),
         }
     }
 }

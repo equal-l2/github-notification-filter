@@ -1,4 +1,4 @@
-use failure::Fallible;
+use failure::{err_msg, Fallible};
 use once_cell::unsync::OnceCell;
 use reqwest::Client;
 use reqwest::StatusCode;
@@ -45,7 +45,40 @@ impl std::fmt::Display for Subscription {
     }
 }
 
-async fn error_unexpected_status(expected: u16, resp: reqwest::Response) -> failure::Error {
+#[derive(Debug, failure::Fail)]
+enum StatusError {
+    #[fail(display = "Rate limit handled")]
+    RateLimit,
+    #[fail(display = "Unexpected status")]
+    Unexpected(String),
+}
+
+async fn check_unexpected_status(expected: u16, resp: reqwest::Response) -> Fallible<String> {
+    use tokio::time;
+    let now = time::Instant::now();
+    if resp.status() != expected {
+        return Err(if let Some(t) = resp
+            .headers()
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse().ok())
+        {
+            eprintln!("Rate limit exceeded, wait for {} secs", t);
+            let _ = resp.text().await?;
+            time::delay_until(now + time::Duration::from_secs(t)).await;
+            StatusError::RateLimit
+        } else {
+            let errmsg = fmt_unexpected_status(expected, resp).await;
+            StatusError::Unexpected(errmsg)
+        }
+        .into());
+    } else {
+        let text = resp.text().await?;
+        return Ok(text);
+    }
+}
+
+async fn fmt_unexpected_status(expected: u16, resp: reqwest::Response) -> String {
     use std::fmt::Write;
 
     let mut ret = format!(
@@ -74,21 +107,27 @@ async fn error_unexpected_status(expected: u16, resp: reqwest::Response) -> fail
     )
     .unwrap();
 
-    failure::err_msg(ret)
+    ret
 }
 
 impl Subscription {
     pub async fn from_thread_id(id: ThreadID, c: &Client) -> Fallible<Self> {
         let url = format!("https://api.github.com/notifications/threads/{}", id);
-        let resp = c.get(&url).send().await?;
-
-        if resp.status() != 200 {
-            return Err(error_unexpected_status(200, resp).await);
+        loop {
+            let resp = c.get(&url).send().await?;
+            match check_unexpected_status(200, resp).await {
+                Fallible::Ok(s) => {
+                    return serde_json::from_str::<Notification>(&s)
+                        .map_err(Into::into)
+                        .map(Into::into)
+                }
+                Fallible::Err(e) => match e.downcast() {
+                    Ok(StatusError::RateLimit) => { /* retrying */ }
+                    Ok(StatusError::Unexpected(s)) => return Err(err_msg(s)),
+                    Err(e) => return Err(e),
+                },
+            }
         }
-
-        serde_json::from_str::<Notification>(&resp.text().await?)
-            .map_err(Into::into)
-            .map(Into::into)
     }
 
     pub async fn open(&self, c: &Client) -> Fallible<()> {
@@ -108,19 +147,26 @@ impl Subscription {
         for i in 1..=last_page {
             let i_str = i.to_string();
             futs.push(async move {
-                let resp = client
-                    .get("https://api.github.com/notifications")
-                    .query(&[("page", &i_str)])
-                    .send()
-                    .await?;
-                if resp.status() != 200 {
-                    return Err(error_unexpected_status(200, resp).await);
+                loop {
+                    let resp = client
+                        .get("https://api.github.com/notifications")
+                        .query(&[("page", &i_str)])
+                        .send()
+                        .await?;
+
+                    match check_unexpected_status(200, resp).await {
+                        Fallible::Ok(s) => {
+                            return Ok(serde_json::from_str::<Vec<Notification>>(&s)?
+                                .into_iter()
+                                .map(Into::into));
+                        }
+                        Fallible::Err(e) => match e.downcast() {
+                            Ok(StatusError::RateLimit) => { /* retrying */ }
+                            Ok(StatusError::Unexpected(s)) => return Err(err_msg(s)),
+                            Err(e) => return Err(e),
+                        },
+                    }
                 }
-                Ok(
-                    serde_json::from_str::<Vec<Notification>>(&resp.text().await?)?
-                        .into_iter()
-                        .map(Into::into),
-                )
             });
         }
 
@@ -131,32 +177,42 @@ impl Subscription {
             .collect())
     }
 
-    pub async fn unsubscribe(&self, client: &Client) -> Fallible<()> {
+    pub async fn unsubscribe(&self, c: &Client) -> Fallible<()> {
         let url = format!(
             "https://api.github.com/notifications/threads/{}/subscription",
             self.thread_id
         );
-        let resp = client.delete(&url).send().await?;
 
-        if resp.status() != 204 {
-            return Err(error_unexpected_status(204, resp).await);
+        loop {
+            let resp = c.delete(&url).send().await?;
+            match check_unexpected_status(204, resp).await {
+                Fallible::Ok(_) => return Ok(()),
+                Fallible::Err(e) => match e.downcast() {
+                    Ok(StatusError::RateLimit) => { /* retrying */ }
+                    Ok(StatusError::Unexpected(s)) => return Err(err_msg(s)),
+                    Err(e) => return Err(e),
+                },
+            }
         }
-
-        Ok(())
     }
 
-    pub async fn mark_as_read(&self, client: &Client) -> Fallible<()> {
+    pub async fn mark_as_read(&self, c: &Client) -> Fallible<()> {
         let url = format!(
             "https://api.github.com/notifications/threads/{}",
             self.thread_id
         );
-        let resp = client.patch(&url).send().await?;
 
-        if resp.status() != 205 {
-            return Err(error_unexpected_status(205, resp).await);
+        loop {
+            let resp = c.patch(&url).send().await?;
+            match check_unexpected_status(205, resp).await {
+                Fallible::Ok(_) => return Ok(()),
+                Fallible::Err(e) => match e.downcast() {
+                    Ok(StatusError::RateLimit) => { /* retrying */ }
+                    Ok(StatusError::Unexpected(s)) => return Err(err_msg(s)),
+                    Err(e) => return Err(e),
+                },
+            }
         }
-
-        Ok(())
     }
 
     /// get url for subject's html location
@@ -170,12 +226,23 @@ impl Subscription {
     }
 
     async fn fetch_subject_detail(&self, c: &Client) -> Fallible<SubjectDetail> {
-        let url = &self.subject.url;
-        let resp = c.get(url).send().await?;
-        if resp.status() != 200 {
-            return Err(error_unexpected_status(200, resp).await);
+        let url = &self
+            .subject
+            .url
+            .as_ref()
+            .expect("tried to fetch subject_detail of Discussions");
+
+        loop {
+            let resp = c.get(*url).send().await?;
+            match check_unexpected_status(200, resp).await {
+                Fallible::Ok(s) => return serde_json::from_str(&s).map_err(Into::into),
+                Fallible::Err(e) => match e.downcast() {
+                    Ok(StatusError::RateLimit) => { /* retrying */ }
+                    Ok(StatusError::Unexpected(s)) => return Err(err_msg(s)),
+                    Err(e) => return Err(e),
+                },
+            }
         }
-        serde_json::from_str(&resp.text().await?).map_err(Into::into)
     }
 
     async fn subject_detail(&self, c: &Client) -> Fallible<&SubjectDetail> {
