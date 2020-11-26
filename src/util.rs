@@ -54,7 +54,8 @@ pub fn compile_regex() -> Fallible<RegexSet> {
     regex::RegexSetBuilder::new(
         read_config("filters")
             .expect("Failed to read filters from ~/.ghnf/filters")
-            .split('\n'),
+            .split('\n')
+            .filter(|s| !s.is_empty()),
     )
     .case_insensitive(true)
     .build()
