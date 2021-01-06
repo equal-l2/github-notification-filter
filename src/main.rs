@@ -19,23 +19,27 @@ use crate::subscription::gh_objects::SubjectType;
 use crate::subscription::Subscription;
 use util::Filters;
 
-async fn sc_open(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
-    let ss: Vec<Subscription> = {
-        if let Some(i) = m.values_of("thread_ids") {
-            let mut ids = vec![];
-            for v in i {
-                let id_str = v.parse();
-                if let Ok(id) = id_str {
-                    if let Ok(s) = Subscription::from_thread_id(id, c).await {
-                        ids.push(s);
-                    } else {
-                        bail!("could not retrieve: {}", id);
-                    }
-                } else {
-                    bail!("malformed input: {}", v);
-                }
+async fn parse_thread_ids(vals: clap::Values<'_>, c: &Client) -> Fallible<Vec<Subscription>> {
+    let mut ids = vec![];
+    for v in vals {
+        let id_str = v.parse();
+        if let Ok(id) = id_str {
+            if let Ok(s) = Subscription::from_thread_id(id, c).await {
+                ids.push(s);
+            } else {
+                bail!("could not retrieve: {}", id);
             }
-            Ok(ids)
+        } else {
+            bail!("malformed input: {}", v);
+        }
+    }
+    Ok(ids)
+}
+
+async fn sc_open(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
+    let ss = {
+        if let Some(i) = m.values_of("thread_ids") {
+            parse_thread_ids(i, c).await
         } else {
             util::fetch_filtered(Filters::new(m, false)?, c).await
         }
@@ -53,8 +57,7 @@ async fn sc_open(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
 }
 
 async fn sc_list(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
-    let ss = util::fetch_filtered(Filters::new(m, false)?, c)
-        .await?;
+    let ss = util::fetch_filtered(Filters::new(m, false)?, c).await?;
 
     let ss = if m.is_present("closed") {
         util::filter_by_subject_state(ss, subscription::SubjectState::Closed, c).await?
@@ -73,12 +76,22 @@ async fn sc_list(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
 async fn sc_remove(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
     let dry = m.is_present("dry-run");
 
-    let ss = util::fetch_filtered(Filters::new(m, true)?, c).await?;
+    let ss = {
+        if let Some(i) = m.values_of("thread_ids") {
+            parse_thread_ids(i, c).await
+        } else {
+            util::fetch_filtered(Filters::new(m, true)?, c).await
+        }
+    }?;
     println!("{} notifications left", ss.len());
 
     println!("Filtering out open notifications...");
-    let ss: Vec<Subscription> =
-        util::filter_by_subject_state(util::filter_ignored(ss).unwrap(), subscription::SubjectState::Closed, c).await?;
+    let ss: Vec<Subscription> = util::filter_by_subject_state(
+        util::filter_ignored(ss).unwrap(),
+        subscription::SubjectState::Closed,
+        c,
+    )
+    .await?;
     println!("{} notification(s) left", ss.len());
 
     util::unsubscribe_all(ss, dry, c).await
@@ -125,6 +138,11 @@ async fn main() {
                         .short("k")
                         .takes_value(true)
                         .possible_values(&["commit", "issue", "pr"]),
+                    Arg::with_name("thread_ids")
+                        .conflicts_with("filter")
+                        .conflicts_with("kind")
+                        .min_values(1)
+                        .required(true),
                 ])
                 .visible_alias("rm"),
         )
@@ -172,7 +190,7 @@ async fn main() {
                     Arg::with_name("closed")
                         .help("show only closed notifications")
                         .long("closed")
-                        .short("c")
+                        .short("c"),
                 ])
                 .visible_alias("ls"),
         )

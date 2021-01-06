@@ -150,7 +150,7 @@ pub async fn unsubscribe_all(ss: Vec<Subscription>, dry: bool, c: &Client) -> Fa
 
     if dry {
         println!("\nFollowing threads are going to be unsubscribed:");
-        for s in &ss{
+        for s in &ss {
             println!("{}", s);
         }
         return Ok(());
