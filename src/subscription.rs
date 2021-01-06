@@ -65,7 +65,7 @@ async fn check_unexpected_status(expected: u16, resp: reqwest::Response) -> Fall
         {
             eprintln!("Rate limit exceeded, wait for {} secs", t);
             let _ = resp.text().await?;
-            time::delay_until(now + time::Duration::from_secs(t)).await;
+            time::sleep_until(now + time::Duration::from_secs(t)).await;
             StatusError::RateLimit
         } else {
             let errmsg = fmt_unexpected_status(expected, resp).await;
