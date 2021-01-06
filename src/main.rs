@@ -142,7 +142,6 @@ async fn main() {
                         .conflicts_with("filter")
                         .conflicts_with("kind")
                         .min_values(1)
-                        .required(true),
                 ])
                 .visible_alias("rm"),
         )
