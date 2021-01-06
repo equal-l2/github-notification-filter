@@ -8,7 +8,7 @@
 #![allow(clippy::match_wildcard_for_single_variants)]
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
-use failure::{bail, Error, Fallible};
+use failure::{bail, Fallible};
 use futures::future;
 use reqwest::Client;
 
@@ -54,8 +54,13 @@ async fn sc_open(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
 
 async fn sc_list(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
     let ss = util::fetch_filtered(Filters::new(m, false)?, c)
-        .await
-        .unwrap_or_else(|e: Error| panic!("{} :\n{}", e, e.backtrace()));
+        .await?;
+
+    let ss = if m.is_present("closed") {
+        util::filter_by_subject_state(ss, subscription::SubjectState::Closed, c).await?
+    } else {
+        ss
+    };
 
     for s in &ss {
         println!("{}", s);
@@ -71,7 +76,12 @@ async fn sc_remove(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
     let ss = util::fetch_filtered(Filters::new(m, true)?, c).await?;
     println!("{} notifications left", ss.len());
 
-    util::filter_and_unsubscribe(ss, dry, c).await
+    println!("Filtering out open notifications...");
+    let ss: Vec<Subscription> =
+        util::filter_by_subject_state(util::filter_ignored(ss).unwrap(), subscription::SubjectState::Closed, c).await?;
+    println!("{} notification(s) left", ss.len());
+
+    util::unsubscribe_all(ss, dry, c).await
 }
 
 async fn sc_request(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
@@ -159,6 +169,10 @@ async fn main() {
                         .short("k")
                         .takes_value(true)
                         .possible_values(&["commit", "issue", "pr"]),
+                    Arg::with_name("closed")
+                        .help("show only closed notifications")
+                        .long("closed")
+                        .short("c")
                 ])
                 .visible_alias("ls"),
         )

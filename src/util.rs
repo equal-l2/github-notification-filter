@@ -142,20 +142,15 @@ pub async fn filter_by_subject_state(
     Ok(ret)
 }
 
-pub async fn filter_and_unsubscribe(ss: Vec<Subscription>, dry: bool, c: &Client) -> Fallible<()> {
-    println!("Filtering out open notifications...");
-    let candidates: Vec<Subscription> =
-        filter_by_subject_state(filter_ignored(ss).unwrap(), SubjectState::Closed, c).await?;
-    println!("{} notification(s) left", candidates.len());
-
-    if candidates.is_empty() {
+pub async fn unsubscribe_all(ss: Vec<Subscription>, dry: bool, c: &Client) -> Fallible<()> {
+    if ss.is_empty() {
         println!("No notification matched");
         return Ok(());
     }
 
     if dry {
         println!("\nFollowing threads are going to be unsubscribed:");
-        for s in &candidates {
+        for s in &ss{
             println!("{}", s);
         }
         return Ok(());
@@ -163,7 +158,7 @@ pub async fn filter_and_unsubscribe(ss: Vec<Subscription>, dry: bool, c: &Client
 
     println!("Unsubscribing notifications...");
     let mut futs = vec![];
-    for s in candidates {
+    for s in ss {
         futs.push(async move {
             s.unsubscribe(c).await?;
             s.mark_as_read(c).await?;
