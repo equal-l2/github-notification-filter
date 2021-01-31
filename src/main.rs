@@ -8,7 +8,7 @@
 #![allow(clippy::match_wildcard_for_single_variants)]
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
-use failure::{bail, Fallible};
+use anyhow::{bail, Result};
 use futures::future;
 use reqwest::Client;
 
@@ -19,7 +19,7 @@ use crate::subscription::gh_objects::SubjectType;
 use crate::subscription::Subscription;
 use util::Filters;
 
-async fn parse_thread_ids(vals: clap::Values<'_>, c: &Client) -> Fallible<Vec<Subscription>> {
+async fn parse_thread_ids(vals: clap::Values<'_>, c: &Client) -> Result<Vec<Subscription>> {
     let mut ids = vec![];
     for v in vals {
         let id_str = v.parse();
@@ -36,7 +36,7 @@ async fn parse_thread_ids(vals: clap::Values<'_>, c: &Client) -> Fallible<Vec<Su
     Ok(ids)
 }
 
-async fn sc_open(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
+async fn sc_open(m: &ArgMatches<'_>, c: &Client) -> Result<()> {
     let ss = {
         if let Some(i) = m.values_of("thread_ids") {
             parse_thread_ids(i, c).await
@@ -63,7 +63,7 @@ async fn sc_open(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
     Ok(())
 }
 
-async fn sc_list(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
+async fn sc_list(m: &ArgMatches<'_>, c: &Client) -> Result<()> {
     let ss = util::fetch_filtered(Filters::new(m, false)?, c).await?;
 
     let ss = if m.is_present("closed") {
@@ -80,7 +80,7 @@ async fn sc_list(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
     Ok(())
 }
 
-async fn sc_remove(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
+async fn sc_remove(m: &ArgMatches<'_>, c: &Client) -> Result<()> {
     let dry = m.is_present("dry-run");
 
     let ss = {
@@ -104,7 +104,7 @@ async fn sc_remove(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
     util::unsubscribe_all(ss, dry, c).await
 }
 
-async fn sc_request(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
+async fn sc_request(m: &ArgMatches<'_>, c: &Client) -> Result<()> {
     let url = m.value_of("URL").unwrap();
     let resp = c.get(url).send().await?;
     if resp.status() != 200 {

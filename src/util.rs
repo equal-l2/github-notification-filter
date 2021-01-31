@@ -1,4 +1,4 @@
-use failure::{err_msg, Fallible};
+use anyhow::{anyhow, Result};
 use futures::future::try_join_all;
 use regex::RegexSet;
 use reqwest::Client;
@@ -13,7 +13,7 @@ pub struct Filters {
 }
 
 impl Filters {
-    pub fn new(m: &clap::ArgMatches<'_>, with_default_regex: bool) -> Fallible<Self> {
+    pub fn new(m: &clap::ArgMatches<'_>, with_default_regex: bool) -> Result<Self> {
         Ok(Self {
             regex: {
                 if let Some(i) = m.value_of("filter") {
@@ -42,15 +42,15 @@ impl Filters {
 
 const CHUNK_SIZE: usize = 64;
 
-pub fn read_config(filename: &str) -> Fallible<String> {
+pub fn read_config(filename: &str) -> Result<String> {
     let path = dirs::home_dir()
-        .ok_or_else(|| err_msg("Failed to read ~/"))?
+        .ok_or_else(|| anyhow!("Failed to read ~/"))?
         .join(".ghnf")
         .join(filename);
     std::fs::read_to_string(path).map_err(Into::into)
 }
 
-pub fn compile_regex() -> Fallible<RegexSet> {
+pub fn compile_regex() -> Result<RegexSet> {
     regex::RegexSetBuilder::new(
         read_config("filters")
             .expect("Failed to read filters from ~/.ghnf/filters")
@@ -62,12 +62,12 @@ pub fn compile_regex() -> Fallible<RegexSet> {
     .map_err(Into::into)
 }
 
-pub fn create_client() -> Fallible<Client> {
+pub fn create_client() -> Result<Client> {
     let token = read_config("token")
         .expect("Failed to read GitHub token from ~/.ghnf/token")
         .split('\n')
         .next()
-        .ok_or_else(|| err_msg("Malformed GitHub Personal Access Token"))?
+        .ok_or_else(|| anyhow!("Malformed GitHub Personal Access Token"))?
         .to_owned();
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
@@ -78,15 +78,17 @@ pub fn create_client() -> Fallible<Client> {
         .user_agent("GitHub Notification Filter (by equal-l2)")
         .default_headers(headers)
         .pool_idle_timeout(std::time::Duration::from_secs(30)) // ++ritual++ for retrying
+        .http2_prior_knowledge()
+        .https_only(true)
         .build()
         .map_err(Into::into)
 }
 
-pub fn load_ignored() -> Fallible<Vec<ThreadID>> {
+pub fn load_ignored() -> Result<Vec<ThreadID>> {
     // `ignore` is optional, return empty vec when not found
     read_config("ignore")
         .or_else(|e| {
-            if let Some(i) = e.as_fail().downcast_ref::<std::io::Error>() {
+            if let Some(i) = e.downcast_ref::<std::io::Error>() {
                 if matches!(i.kind(), std::io::ErrorKind::NotFound) {
                     return Ok("".into());
                 }
@@ -99,7 +101,7 @@ pub fn load_ignored() -> Fallible<Vec<ThreadID>> {
         .collect()
 }
 
-pub fn filter_ignored(ss: Vec<Subscription>) -> Fallible<Vec<Subscription>> {
+pub fn filter_ignored(ss: Vec<Subscription>) -> Result<Vec<Subscription>> {
     let ignore = load_ignored().expect("Failed to read GitHub token from ~/.ghnf/ignored");
     Ok(ss
         .into_iter()
@@ -111,7 +113,7 @@ pub async fn filter_by_subject_state(
     ss: Vec<Subscription>,
     state: SubjectState,
     c: &Client,
-) -> Fallible<Vec<Subscription>> {
+) -> Result<Vec<Subscription>> {
     let mut futs = Vec::with_capacity(CHUNK_SIZE);
     let mut ret = vec![];
     for s in ss {
@@ -130,19 +132,19 @@ pub async fn filter_by_subject_state(
         });
         if futs.len() >= CHUNK_SIZE {
             //eprintln!("join!");
-            let r: Fallible<_> = try_join_all(futs.drain(..)).await;
+            let r: Result<_> = try_join_all(futs.drain(..)).await;
             ret.extend(r?.into_iter().flatten());
         }
     }
     {
         //eprintln!("final join!");
-        let r: Fallible<_> = try_join_all(futs).await;
+        let r: Result<_> = try_join_all(futs).await;
         ret.extend(r?.into_iter().flatten());
     }
     Ok(ret)
 }
 
-pub async fn unsubscribe_all(ss: Vec<Subscription>, dry: bool, c: &Client) -> Fallible<()> {
+pub async fn unsubscribe_all(ss: Vec<Subscription>, dry: bool, c: &Client) -> Result<()> {
     if ss.is_empty() {
         println!("No notification matched");
         return Ok(());
@@ -163,7 +165,7 @@ pub async fn unsubscribe_all(ss: Vec<Subscription>, dry: bool, c: &Client) -> Fa
             s.unsubscribe(c).await?;
             s.mark_as_read(c).await?;
             println!("Unsubscribed {}", s);
-            Fallible::Ok(())
+            Result::<()>::Ok(())
         });
         if futs.len() >= CHUNK_SIZE {
             try_join_all(futs.drain(..)).await?;
@@ -173,7 +175,7 @@ pub async fn unsubscribe_all(ss: Vec<Subscription>, dry: bool, c: &Client) -> Fa
     Ok(())
 }
 
-pub async fn fetch_filtered(filt: Filters, c: &Client) -> Fallible<Vec<Subscription>> {
+pub async fn fetch_filtered(filt: Filters, c: &Client) -> Result<Vec<Subscription>> {
     println!("Fetching notifications...");
 
     let svec = Subscription::fetch_unread(c).await?;
