@@ -44,6 +44,13 @@ async fn sc_open(m: &ArgMatches<'_>, c: &Client) -> Fallible<()> {
             util::fetch_filtered(Filters::new(m, false)?, c).await
         }
     }?;
+
+    let ss = if m.is_present("closed") {
+        util::filter_by_subject_state(ss, subscription::SubjectState::Closed, c).await?
+    } else {
+        ss
+    };
+
     println!("Opening {} page(s)...", ss.len());
 
     let futs = ss.into_iter().map(|s| async move {
@@ -170,6 +177,10 @@ async fn main() {
                         .short("k")
                         .takes_value(true)
                         .possible_values(&["commit", "issue", "pr"]),
+                    Arg::with_name("closed")
+                        .help("open only closed notifications")
+                        .long("closed")
+                        .short("c"),
                 ]),
         )
         .subcommand(
